@@ -1,0 +1,631 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rust Media Server</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #121212;
+            color: #e0e0e0;
+            margin: 0;
+            display: flex;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        /* Sidebar */
+        .sidebar {
+            width: 250px;
+            background: #1e1e1e;
+            display: flex;
+            flex-direction: column;
+            padding: 20px;
+            border-right: 1px solid #333;
+        }
+
+        .sidebar h1 {
+            font-size: 1.2rem;
+            margin-bottom: 20px;
+            color: #fff;
+        }
+
+        .nav-item {
+            padding: 10px;
+            cursor: pointer;
+            border-radius: 4px;
+            margin-bottom: 5px;
+            color: #aaa;
+            transition: 0.2s;
+        }
+
+        .nav-item:hover,
+        .nav-item.active {
+            background: #333;
+            color: #fff;
+        }
+
+        .nav-section {
+            margin-top: 20px;
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            color: #666;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+
+        .add-btn {
+            background: #333;
+            color: #fff;
+            border: 1px dashed #555;
+            padding: 10px;
+            text-align: center;
+            cursor: pointer;
+            border-radius: 4px;
+            margin-top: 10px;
+            font-size: 0.9rem;
+        }
+
+        .add-btn:hover {
+            background: #444;
+        }
+
+        /* Main Content */
+        .main {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .header {
+            padding: 20px;
+            background: #1e1e1e;
+            border-bottom: 1px solid #333;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .header h2 {
+            margin: 0;
+            font-size: 1.5rem;
+        }
+
+        .actions button {
+            background: #007acc;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        .actions button:hover {
+            background: #005f9e;
+        }
+
+        .content {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+        }
+
+        /* Video Player */
+        .player-container {
+            width: 100%;
+            aspect-ratio: 16/9;
+            background: #000;
+            margin-bottom: 20px;
+            display: none;
+        }
+
+        .player-container.active {
+            display: block;
+        }
+
+        video {
+            width: 100%;
+            height: 100%;
+        }
+
+        /* Grid */
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+            gap: 20px;
+        }
+
+        .card {
+            background: #252525;
+            border-radius: 8px;
+            overflow: hidden;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+
+        .card:hover {
+            transform: scale(1.02);
+            background: #333;
+        }
+
+        .card img {
+            width: 100%;
+            height: 270px;
+            object-fit: cover;
+            background: #000;
+        }
+
+        .card-info {
+            padding: 10px;
+        }
+
+        .card h3 {
+            font-size: 0.95rem;
+            margin: 0 0 5px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            color: #fff;
+        }
+
+        .card p {
+            font-size: 0.8rem;
+            color: #aaa;
+            margin: 0;
+        }
+
+        /* Modal */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+
+        .modal.active {
+            display: flex;
+        }
+
+        .modal-content {
+            background: #252525;
+            padding: 20px;
+            border-radius: 8px;
+            width: 400px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+        }
+
+        .modal h3 {
+            margin-top: 0;
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-size: 0.9rem;
+            color: #ccc;
+        }
+
+        .form-group input,
+        .form-group select {
+            width: 100%;
+            padding: 8px;
+            background: #333;
+            border: 1px solid #444;
+            color: #fff;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+
+        .modal-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        .modal-actions button {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        .btn-cancel {
+            background: #444;
+            color: #ccc;
+        }
+
+        .btn-save {
+            background: #007acc;
+            color: #fff;
+        }
+
+        /* Toast */
+        .toast {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: #333;
+            padding: 10px 20px;
+            border-radius: 4px;
+            opacity: 0;
+            transition: opacity 0.3s;
+            pointer-events: none;
+        }
+
+        .toast.show {
+            opacity: 1;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="sidebar">
+        <h1>Media Server</h1>
+        <div class="nav-item active" onclick="loadView('home')">🏠 Home</div>
+
+        <div class="nav-section">Libraries</div>
+        <div id="library-list">
+            <!-- Libraries injected here -->
+        </div>
+        <div class="add-btn" onclick="openModal()">+ Add Library</div>
+
+        <div class="nav-section">System</div>
+        <div class="nav-item" onclick="loadView('settings')">⚙️ Settings</div>
+    </div>
+
+    <div class="main">
+        <div class="header">
+            <h2 id="page-title">Home</h2>
+            <div class="actions">
+                <button onclick="scanMedia()">🔄 Scan All</button>
+            </div>
+        </div>
+
+        <div class="content">
+            <div id="player-container" class="player-container">
+                <video id="player" controls></video>
+            </div>
+
+            <!-- Views -->
+            <div id="view-grid" class="view-section">
+                <div id="continue-watching-section" style="display: none; margin-bottom: 30px;">
+                    <h3>Continue Watching</h3>
+                    <div class="grid" id="continue-grid"></div>
+                    <hr style="border-color: #333; margin-top: 20px;">
+                </div>
+                <h3 id="grid-title">Recently Added</h3>
+                <div class="grid" id="media-grid"></div>
+            </div>
+
+            <div id="view-settings" class="view-section" style="display: none;">
+                <div class="settings-form"
+                    style="max-width: 500px; background: #252525; padding: 20px; border-radius: 8px;">
+                    <h3>API Configuration</h3>
+                    <div class="form-group">
+                        <label>OMDB API Key</label>
+                        <input type="text" id="setting-omdb-key" placeholder="Enter your OMDB API Key">
+                    </div>
+                    <button class="btn-save" onclick="saveSettings()">Save Settings</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Library Modal -->
+    <div class="modal" id="add-modal">
+        <div class="modal-content">
+            <h3>Add Library</h3>
+            <div class="form-group">
+                <label>Name</label>
+                <input type="text" id="lib-name" placeholder="e.g. Movies">
+            </div>
+            <div class="form-group">
+                <label>Folder Path</label>
+                <input type="text" id="lib-path" placeholder="C:\Media\Movies">
+            </div>
+            <div class="form-group">
+                <label>Type</label>
+                <select id="lib-type">
+                    <option value="movies">Movies</option>
+                    <option value="tv_shows">TV Shows</option>
+                    <option value="music_videos">Music Videos</option>
+                </select>
+            </div>
+            <div class="modal-actions">
+                <button class="btn-cancel" onclick="closeModal()">Cancel</button>
+                <button class="btn-save" onclick="saveLibrary()">Add Library</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="toast" id="toast">Action Successful</div>
+
+    <script>
+        let currentView = 'home';
+        let libraries = [];
+        let progressInterval = null;
+        let currentMediaId = null;
+
+        async function init() {
+            await fetchLibraries();
+            loadView('home');
+        }
+
+        async function fetchLibraries() {
+            const res = await fetch('/api/libraries');
+            libraries = await res.json();
+            renderSidebar();
+        }
+
+        function renderSidebar() {
+            const list = document.getElementById('library-list');
+            list.innerHTML = '';
+            libraries.forEach(lib => {
+                const item = document.createElement('div');
+                item.className = `nav-item ${currentView === 'lib-' + lib.id ? 'active' : ''}`;
+                item.innerText = getIcon(lib.library_type) + ' ' + lib.name;
+                item.onclick = () => loadView('lib-' + lib.id, lib);
+
+                // Right click to delete (simple for now)
+                item.oncontextmenu = (e) => {
+                    e.preventDefault();
+                    if (confirm(`Delete library "${lib.name}"?`)) {
+                        deleteLibrary(lib.id);
+                    }
+                };
+
+                list.appendChild(item);
+            });
+
+            // Highlight Settings if active
+            const settingsItem = document.querySelector('.nav-item[onclick="loadView(\'settings\')"]');
+            if (settingsItem) {
+                if (currentView === 'settings') settingsItem.classList.add('active');
+                else settingsItem.classList.remove('active');
+            }
+        }
+
+        function getIcon(type) {
+            if (type === 'movies') return '🎬';
+            if (type === 'tv_shows') return '📺';
+            if (type === 'music_videos') return '🎵';
+            return '📁';
+        }
+
+        async function loadView(view, libData) {
+            currentView = view;
+
+            // Update Sidebar Active State
+            document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+            renderSidebar();
+
+            const title = document.getElementById('page-title');
+            const gridSection = document.getElementById('view-grid');
+            const settingsSection = document.getElementById('view-settings');
+            const continueSection = document.getElementById('continue-watching-section');
+            const gridTitle = document.getElementById('grid-title');
+
+            // Hide all views first
+            gridSection.style.display = 'none';
+            settingsSection.style.display = 'none';
+            continueSection.style.display = 'none';
+
+            // Cleanup player
+            cleanupPlayer();
+
+            if (view === 'home') {
+                title.innerText = 'Home';
+                gridSection.style.display = 'block';
+
+                // Load Continue Watching
+                const contRes = await fetch('/api/continue');
+                const contData = await contRes.json();
+                if (contData.length > 0) {
+                    continueSection.style.display = 'block';
+                    renderGrid(contData, 'continue-grid', true);
+                }
+
+                gridTitle.innerText = 'Recently Added';
+                const res = await fetch('/api/recent');
+                const data = await res.json();
+                renderGrid(data, 'media-grid');
+
+            } else if (view.startsWith('lib-')) {
+                gridSection.style.display = 'block';
+                const libId = view.split('-')[1];
+                title.innerText = libData ? libData.name : 'Library';
+                gridTitle.innerText = 'All Media';
+                const res = await fetch(`/api/libraries/${libId}/media`);
+                const data = await res.json();
+                renderGrid(data, 'media-grid');
+            } else if (view === 'settings') {
+                title.innerText = 'Settings';
+                settingsSection.style.display = 'block';
+                loadSettings();
+            }
+        }
+
+        async function loadSettings() {
+            const res = await fetch('/api/settings');
+            const data = await res.json();
+            // Populate form
+            const keySetting = data.find(s => s.key === 'omdb_api_key');
+            if (keySetting) {
+                document.getElementById('setting-omdb-key').value = keySetting.value;
+            }
+        }
+
+        async function saveSettings() {
+            const apiKey = document.getElementById('setting-omdb-key').value;
+
+            if (apiKey) {
+                await fetch('/api/settings', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ key: 'omdb_api_key', value: apiKey })
+                });
+                showToast('Settings Saved');
+            }
+        }
+
+        function renderGrid(data, elementId, isContinue = false) {
+            const grid = document.getElementById(elementId);
+            grid.innerHTML = '';
+            if (data.length === 0) {
+                if (!isContinue) grid.innerHTML = '<p>No media found.</p>';
+                return;
+            }
+            data.forEach(item => {
+                const div = document.createElement('div');
+                div.className = 'card';
+                div.onclick = () => playVideo(item.id);
+
+                let progressIndicator = '';
+                if (isContinue && item.progress) {
+                    // Could add a progress bar here
+                    const percent = (item.progress / (item.total_duration || item.progress)) * 100;
+                    progressIndicator = `<div style="background:#555; height:4px; width:100%; margin-top:5px; border-radius:2px;"><div style="background:#007acc; height:100%; width:${percent}%; border-radius:2px;"></div></div>`;
+                }
+
+                div.innerHTML = `
+                    <img src="${item.poster_url || 'https://via.placeholder.com/200x300?text=' + encodeURIComponent(item.title || 'No Poster')}" alt="${item.title}">
+                    <div class="card-info">
+                        <h3>${item.title || item.file_path}</h3>
+                        <p>${item.year || ''}</p>
+                        ${progressIndicator}
+                    </div>
+                `;
+                grid.appendChild(div);
+            });
+        }
+
+        async function playVideo(id) {
+            // Fetch Saved Progress
+            const progRes = await fetch(`/api/media/${id}/progress`);
+            const progData = await progRes.json();
+            const startPos = progData.position || 0;
+
+            const container = document.getElementById('player-container');
+            const player = document.getElementById('player');
+            container.classList.add('active');
+            player.src = `/stream/${id}`;
+            currentMediaId = id;
+
+            window.scrollTo(0, 0);
+
+            // Resume Logic
+            player.onloadedmetadata = () => {
+                if (startPos > 5) { // Only resume if progress > 5s
+                    player.currentTime = startPos;
+                    showToast(`Resumed from ${formatTime(startPos)}`);
+                }
+                player.play();
+            };
+
+            // Progress Saving
+            progressInterval = setInterval(() => {
+                if (!player.paused && player.currentTime > 0) {
+                    saveProgress(id, player.currentTime, player.duration);
+                }
+            }, 5000); // Save every 5 seconds
+        }
+
+        function cleanupPlayer() {
+            const player = document.getElementById('player');
+            player.pause();
+            player.src = '';
+            document.getElementById('player-container').classList.remove('active');
+            if (progressInterval) clearInterval(progressInterval);
+            currentMediaId = null;
+        }
+
+        async function saveProgress(id, time, total) {
+            if (!total) return;
+            await fetch(`/api/media/${id}/progress`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ position: Math.floor(time), total_duration: Math.floor(total) })
+            });
+        }
+
+        function formatTime(seconds) {
+            const m = Math.floor(seconds / 60);
+            const s = Math.floor(seconds % 60);
+            return `${m}:${s < 10 ? '0' : ''}${s}`;
+        }
+
+        // Modal
+        function openModal() { document.getElementById('add-modal').classList.add('active'); }
+        function closeModal() { document.getElementById('add-modal').classList.remove('active'); }
+
+        async function saveLibrary() {
+            const name = document.getElementById('lib-name').value;
+            const path = document.getElementById('lib-path').value;
+            const type = document.getElementById('lib-type').value;
+
+            if (!name || !path) {
+                alert('Please fill all fields');
+                return;
+            }
+
+            const res = await fetch('/api/libraries', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name, path, library_type: type })
+            });
+
+            if (res.ok) {
+                closeModal();
+                showToast('Library Created');
+                fetchLibraries();
+                // Clear form
+                document.getElementById('lib-name').value = '';
+                document.getElementById('lib-path').value = '';
+            } else {
+                alert('Error creating library');
+            }
+        }
+
+        async function deleteLibrary(id) {
+            const res = await fetch(`/api/libraries/${id}`, { method: 'DELETE' });
+            if (res.ok) {
+                showToast('Library Deleted');
+                fetchLibraries();
+                if (currentView === 'lib-' + id) loadView('home');
+            } else {
+                alert('Error deleting library');
+            }
+        }
+
+        async function scanMedia() {
+            showToast('Scanning started...');
+            await fetch('/api/scan', { method: 'POST' });
+        }
+
+        function showToast(msg) {
+            const t = document.getElementById('toast');
+            t.innerText = msg;
+            t.classList.add('show');
+            setTimeout(() => t.classList.remove('show'), 3000);
+        }
+
+        init();
+    </script>
+</body>
+
+</html>

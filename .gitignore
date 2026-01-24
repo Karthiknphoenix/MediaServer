@@ -1,0 +1,34 @@
+# Rust
+/target
+/data
+**/*.rs.bk
+.env
+
+# Android
+.gradle/
+build/
+local.properties
+.idea/
+*.iml
+*.ids
+*.hprof
+/captures
+*.jks
+google-services.json
+.cxx/
+
+# VS Code
+.vscode/
+
+# System
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Test Scripts
+src/tmdb_verify.rs
+src/check_db.rs
+
+# Agent Artifacts
+.gemini/
+.agent/

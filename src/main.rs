@@ -2,13 +2,13 @@ mod db;
 mod api;
 mod core;
 
-use std::env;
+
 use std::net::SocketAddr;
 use dotenv::dotenv;
 use crate::db::init_db;
 use crate::api::routes::app;
-use crate::core::scanner::scan_media;
 use tower_http::services::ServeDir;
+use tower_http::trace::TraceLayer;
 
 #[tokio::main]
 async fn main() {
@@ -19,20 +19,20 @@ async fn main() {
 
     let pool = init_db().await;
     
-    // Background scan
-    let pool_clone = pool.clone();
-    // Removed hardcoded media_path env reading, now uses libraries from DB
+    // Migration: Add backdrop_url column if not exists
+    let _ = sqlx::query("ALTER TABLE media ADD COLUMN backdrop_url TEXT").execute(&pool).await;
     
-    tokio::spawn(async move {
-        scan_media(&pool_clone).await;
-    });
+    // Background scan removed to prevent load on startup
+    // Scan is now triggered manually via API or on library creation
 
-    // Router with static file serving
+    // Router with static file serving and request logging
     let app = app(pool)
-        .nest_service("/", ServeDir::new("static"));
+        .nest_service("/", ServeDir::new("static"))
+        .layer(TraceLayer::new_for_http());
 
-    let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
-    println!("listening on {}", addr);
+    let addr = SocketAddr::from(([0, 0, 0, 0], 3000));
+    println!("🚀 Server listening on http://{}", addr);
+    println!("💡 To connect from other devices, use your machine's local IP address (e.g., http://192.168.x.x:3000)");
     
     let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
     axum::serve(listener, app).await.unwrap();

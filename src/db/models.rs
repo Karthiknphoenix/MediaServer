@@ -3,10 +3,12 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize, Clone, sqlx::Type, PartialEq)]
 #[sqlx(type_name = "TEXT", rename_all = "snake_case")]
+#[serde(rename_all = "snake_case")]
 pub enum LibraryType {
     Movies,
     TvShows,
     MusicVideos,
+    Other,
 }
 
 #[derive(Debug, FromRow, Serialize, Deserialize, Clone)]
@@ -15,6 +17,7 @@ pub struct Setting {
     pub value: String,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, FromRow, Serialize, Deserialize, Clone)]
 pub struct PlaybackProgress {
     pub media_id: i64,
@@ -42,4 +45,13 @@ pub struct Media {
     pub plot: Option<String>,
     pub media_type: Option<String>, // "movie" or "episode", kept for compatibility/metadata
     pub added_at: Option<chrono::NaiveDateTime>,
+    // TV Show specific fields
+    pub series_name: Option<String>,
+    pub season_number: Option<i32>,
+    pub episode_number: Option<i32>,
+    pub tmdb_id: Option<i64>,
+    pub backdrop_url: Option<String>,
+    pub still_url: Option<String>,
+    pub runtime: Option<i32>,
+    pub genres: Option<String>,
 }

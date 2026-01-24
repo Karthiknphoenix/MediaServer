@@ -1,14 +1,19 @@
 pub mod models;
 
-use sqlx::sqlite::{SqlitePool, SqlitePoolOptions};
+use sqlx::sqlite::{SqlitePool, SqlitePoolOptions, SqliteConnectOptions};
+use std::str::FromStr;
 use std::env;
 
 pub async fn init_db() -> SqlitePool {
     let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
     
+    let options = SqliteConnectOptions::from_str(&database_url)
+        .expect("Failed to parse DATABASE_URL")
+        .create_if_missing(true);
+
     let pool = SqlitePoolOptions::new()
         .max_connections(5)
-        .connect(&database_url)
+        .connect_with(options)
         .await
         .expect("Failed to connect to database");
 
@@ -83,6 +88,86 @@ pub async fn init_db() -> SqlitePool {
         // Better: Add nullable first or default 0. 
         // Let's Add it as INTEGER DEFAULT 0 for now.
         let _ = sqlx::query("ALTER TABLE media ADD COLUMN library_id INTEGER DEFAULT 0").execute(&pool).await;
+    }
+
+    // Migration: Add TV show columns if they don't exist
+    let has_series_name: Option<i64> = sqlx::query_scalar(
+        "SELECT 1 FROM pragma_table_info('media') WHERE name = 'series_name'"
+    )
+    .fetch_optional(&pool)
+    .await
+    .unwrap_or(None);
+
+    if has_series_name.is_none() {
+        println!("Migrating database: Adding TV show columns to media table");
+        let _ = sqlx::query("ALTER TABLE media ADD COLUMN series_name TEXT").execute(&pool).await;
+        let _ = sqlx::query("ALTER TABLE media ADD COLUMN season_number INTEGER").execute(&pool).await;
+        let _ = sqlx::query("ALTER TABLE media ADD COLUMN episode_number INTEGER").execute(&pool).await;
+    }
+
+    // Migration: Add tmdb_id if it doesn't exist
+    let has_tmdb_id: Option<i64> = sqlx::query_scalar(
+        "SELECT 1 FROM pragma_table_info('media') WHERE name = 'tmdb_id'"
+    )
+    .fetch_optional(&pool)
+    .await
+    .unwrap_or(None);
+
+    if has_tmdb_id.is_none() {
+        println!("Migrating database: Adding tmdb_id to media table");
+        let _ = sqlx::query("ALTER TABLE media ADD COLUMN tmdb_id INTEGER").execute(&pool).await;
+    }
+
+    // Migration: Add backdrop_url if it doesn't exist
+    let has_backdrop_url: Option<i64> = sqlx::query_scalar(
+        "SELECT 1 FROM pragma_table_info('media') WHERE name = 'backdrop_url'"
+    )
+    .fetch_optional(&pool)
+    .await
+    .unwrap_or(None);
+
+    if has_backdrop_url.is_none() {
+        println!("Migrating database: Adding backdrop_url to media table");
+        let _ = sqlx::query("ALTER TABLE media ADD COLUMN backdrop_url TEXT").execute(&pool).await;
+    }
+
+    // Migration: Add still_url if it doesn't exist
+    let has_still_url: Option<i64> = sqlx::query_scalar(
+        "SELECT 1 FROM pragma_table_info('media') WHERE name = 'still_url'"
+    )
+    .fetch_optional(&pool)
+    .await
+    .unwrap_or(None);
+
+    if has_still_url.is_none() {
+        println!("Migrating database: Adding still_url to media table");
+        let _ = sqlx::query("ALTER TABLE media ADD COLUMN still_url TEXT").execute(&pool).await;
+    }
+
+    // Migration: Add runtime if it doesn't exist
+    let has_runtime: Option<i64> = sqlx::query_scalar(
+        "SELECT 1 FROM pragma_table_info('media') WHERE name = 'runtime'"
+    )
+    .fetch_optional(&pool)
+    .await
+    .unwrap_or(None);
+
+    if has_runtime.is_none() {
+        println!("Migrating database: Adding runtime to media table");
+        let _ = sqlx::query("ALTER TABLE media ADD COLUMN runtime INTEGER").execute(&pool).await;
+    }
+
+    // Migration: Add genres if it doesn't exist
+    let has_genres: Option<i64> = sqlx::query_scalar(
+        "SELECT 1 FROM pragma_table_info('media') WHERE name = 'genres'"
+    )
+    .fetch_optional(&pool)
+    .await
+    .unwrap_or(None);
+
+    if has_genres.is_none() {
+        println!("Migrating database: Adding genres to media table");
+        let _ = sqlx::query("ALTER TABLE media ADD COLUMN genres TEXT").execute(&pool).await;
     }
 
     pool

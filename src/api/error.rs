@@ -16,7 +16,10 @@ pub enum AppError {
     /// External service error, e.g., TMDB API failure (502 Bad Gateway)
     External(String),
     /// Bad request / validation error (400 Bad Request)
+    /// Bad request / validation error (400 Bad Request)
     BadRequest(String),
+    /// Generic internal error
+    Internal(String),
 }
 
 impl IntoResponse for AppError {
@@ -26,6 +29,7 @@ impl IntoResponse for AppError {
                 tracing::error!("Database error: {:?}", e);
                 (StatusCode::INTERNAL_SERVER_ERROR, "Internal server error".to_string())
             }
+            AppError::Internal(msg) => (StatusCode::INTERNAL_SERVER_ERROR, msg),
             AppError::NotFound(msg) => (StatusCode::NOT_FOUND, msg),
             AppError::External(msg) => (StatusCode::BAD_GATEWAY, msg),
             AppError::BadRequest(msg) => (StatusCode::BAD_REQUEST, msg),

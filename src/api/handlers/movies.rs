@@ -11,7 +11,7 @@ pub async fn get_library_media(
     Path(id): Path<i64>,
     State(pool): State<SqlitePool>,
 ) -> Result<Json<Vec<Media>>, AppError> {
-    let media = sqlx::query_as::<_, Media>("SELECT * FROM media WHERE library_id = ? ORDER BY title ASC")
+    let media = sqlx::query_as::<_, Media>("SELECT m.*, l.library_type FROM media m JOIN libraries l ON m.library_id = l.id WHERE m.library_id = ? ORDER BY m.title ASC")
         .bind(id)
         .fetch_all(&pool)
         .await?;
@@ -23,6 +23,7 @@ pub async fn get_recently_added(State(pool): State<SqlitePool>) -> Result<Json<V
         SELECT 
             MAX(media.id) as id,
             media.library_id,
+            l.library_type,
             MAX(media.file_path) as file_path,
             COALESCE(media.series_name, media.title) as title,
             media.year,
@@ -44,6 +45,7 @@ pub async fn get_recently_added(State(pool): State<SqlitePool>) -> Result<Json<V
             media.genres
         FROM media
         JOIN libraries l ON media.library_id = l.id
+        WHERE l.library_type != 'other'
         GROUP BY COALESCE(media.series_name, media.id)
         ORDER BY MAX(media.added_at) DESC
         LIMIT 20
@@ -60,7 +62,7 @@ pub async fn get_media_details(
     State(pool): State<SqlitePool>,
     Path(id): Path<i64>,
 ) -> Result<Json<Media>, AppError> {
-    let item = sqlx::query_as::<_, Media>("SELECT * FROM media WHERE id = ?")
+    let item = sqlx::query_as::<_, Media>("SELECT m.*, l.library_type FROM media m JOIN libraries l ON m.library_id = l.id WHERE m.id = ?")
         .bind(id)
         .fetch_optional(&pool)
         .await?

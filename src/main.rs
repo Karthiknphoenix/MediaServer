@@ -4,7 +4,6 @@ mod core;
 
 
 use std::net::SocketAddr;
-use dotenv::dotenv;
 use crate::db::init_db;
 use crate::api::routes::app;
 use tower_http::services::ServeDir;
@@ -12,7 +11,6 @@ use tower_http::trace::TraceLayer;
 
 #[tokio::main]
 async fn main() {
-    dotenv().ok();
     
     // Logging w/ strict type requirement fix if needed, but for now basic:
     tracing_subscriber::fmt::init();
@@ -31,8 +29,8 @@ async fn main() {
         .layer(TraceLayer::new_for_http());
 
     let addr = SocketAddr::from(([0, 0, 0, 0], 3000));
-    println!("🚀 Server listening on http://{}", addr);
-    println!("💡 To connect from other devices, use your machine's local IP address (e.g., http://192.168.x.x:3000)");
+    println!("Vortex Server listening on http://{}", addr);
+    println!("To connect from other devices, use your machine's local IP address (e.g., http://192.168.x.x:3000)");
     
     let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
     axum::serve(listener, app).await.unwrap();

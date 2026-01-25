@@ -173,6 +173,11 @@ async fn process_video(pool: &SqlitePool, path: &Path, library: &Library) {
         let search_term = series_name.as_ref().unwrap_or(&file_stem);
         
         if library.library_type == LibraryType::Other {
+            // For 'Other' libraries, we just want basic entry in DB, no metadata fetching
+             let _ = sqlx::query("UPDATE media SET media_type = 'movie' WHERE id = (SELECT id FROM media WHERE file_path = ?)")
+                .bind(&path_str)
+                .execute(pool)
+                .await;
             return;
         }
 

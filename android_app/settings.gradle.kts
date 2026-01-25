@@ -13,5 +13,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "MediaServerApp"
+rootProject.name = "Vortex"
 include(":app")

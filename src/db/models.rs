@@ -54,4 +54,5 @@ pub struct Media {
     pub still_url: Option<String>,
     pub runtime: Option<i32>,
     pub genres: Option<String>,
+    pub library_type: Option<LibraryType>,
 }

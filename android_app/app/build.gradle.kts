@@ -6,11 +6,11 @@ plugins {
 }
 
 android {
-    namespace = "com.example.mediaserver"
+    namespace = "org.knp.vortex"
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.example.mediaserver"
+        applicationId = "org.knp.vortex"
         minSdk = 24
         targetSdk = 34
         versionCode = 1
@@ -39,7 +39,7 @@ android {
         compose = true
     }
     composeOptions {
-        kotlinCompilerExtensionVersion = "1.5.8"
+        kotlinCompilerExtensionVersion = "1.5.14"
     }
     packaging {
         resources {
@@ -52,6 +52,7 @@ dependencies {
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
+    implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.navigation.compose)
     implementation(platform(libs.androidx.compose.bom))
@@ -74,6 +75,7 @@ dependencies {
 
     // Image
     implementation(libs.coil.compose)
+    implementation(libs.coil.video)
 
     // Video
     implementation(libs.androidx.media3.exoplayer)
@@ -82,6 +84,7 @@ dependencies {
 
     // Security
     implementation(libs.androidx.security.crypto)
+    implementation(libs.androidx.biometric)
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)

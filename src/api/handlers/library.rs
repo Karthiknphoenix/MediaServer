@@ -49,16 +49,16 @@ pub async fn delete_library(
     State(pool): State<SqlitePool>,
 ) -> Result<StatusCode, AppError> {
     // 1. Delete progress for all media in this library
-    // sqlx::query("DELETE FROM playback_progress WHERE media_id IN (SELECT id FROM media WHERE library_id = ?)")
-    //     .bind(id)
-    //     .execute(&pool)
-    //     .await?;
+    sqlx::query("DELETE FROM playback_progress WHERE media_id IN (SELECT id FROM media WHERE library_id = ?)")
+        .bind(id)
+        .execute(&pool)
+        .await?;
 
     // 2. Delete all media entries for this library
-    // sqlx::query("DELETE FROM media WHERE library_id = ?")
-    //     .bind(id)
-    //     .execute(&pool)
-    //     .await?;
+    sqlx::query("DELETE FROM media WHERE library_id = ?")
+        .bind(id)
+        .execute(&pool)
+        .await?;
 
     // 3. Delete the library itself
     sqlx::query("DELETE FROM libraries WHERE id = ?")
@@ -129,6 +129,7 @@ pub struct FileSystemEntry {
     pub path: String,
     pub is_directory: bool,
     pub media_id: Option<i64>,
+    pub poster_url: Option<String>,
 }
 
 pub async fn browse_library(
@@ -174,25 +175,32 @@ pub async fn browse_library(
             let full_path = entry.path();
             let is_dir = full_path.is_dir();
             let mut media_id = None;
+            let mut poster_url = None;
 
             // For files, filter by supported video extensions and get DB ID
             if !is_dir {
                 if let Some(ext) = full_path.extension() {
                      let ext_str = ext.to_string_lossy().to_lowercase();
-                     if !["mp4", "mkv", "avi", "mov", "webm", "wmv"].contains(&ext_str.as_str()) {
+                     if !["mp4", "mkv", "avi", "mov", "webm", "wmv", "m4v", "mpg", "mpeg", "flv", "ts"].contains(&ext_str.as_str()) {
                          continue;
                      }
-                     // Look up media ID
+                     // Look up media ID and poster_url
                      let path_str = full_path.to_string_lossy().to_string();
-                     media_id = sqlx::query_scalar("SELECT id FROM media WHERE file_path = ?")
+                     
+                     // 1. Try SELECT (Case Insensitive for Windows robustness)
+                     let result: Option<(i64, Option<String>)> = sqlx::query_as("SELECT id, poster_url FROM media WHERE file_path = ? COLLATE NOCASE")
                         .bind(&path_str)
                         .fetch_optional(&pool)
                         .await
                         .unwrap_or(None);
                     
-                     if media_id.is_none() {
+                     if let Some((id, poster)) = result {
+                         media_id = Some(id);
+                         poster_url = poster;
+                     } else {
                          let title = full_path.file_stem().map(|s| s.to_string_lossy()).unwrap_or_default();
-                         if let Ok(r) = sqlx::query("INSERT INTO media (file_path, library_id, title) VALUES (?, ?, ?)")
+                         // 2. Try INSERT
+                         if let Ok(r) = sqlx::query("INSERT INTO media (file_path, library_id, title, media_type) VALUES (?, ?, ?, 'movie')")
                              .bind(&path_str)
                              .bind(id)
                              .bind(title)
@@ -200,6 +208,18 @@ pub async fn browse_library(
                              .await 
                          {
                              media_id = Some(r.last_insert_rowid());
+                         } else {
+                             // 3. INSERT failed (likely exists but missed by SELECT due to race/weird case?), Try SELECT again
+                             let retry: Option<(i64, Option<String>)> = sqlx::query_as("SELECT id, poster_url FROM media WHERE file_path = ? COLLATE NOCASE")
+                                .bind(&path_str)
+                                .fetch_optional(&pool)
+                                .await
+                                .unwrap_or(None);
+                                
+                             if let Some((id, poster)) = retry {
+                                 media_id = Some(id);
+                                 poster_url = poster;
+                             }
                          }
                      }
                 } else {
@@ -214,6 +234,7 @@ pub async fn browse_library(
                 path: rel_entry_path.replace("\\", "/"),
                 is_directory: is_dir,
                 media_id,
+                poster_url,
             });
         }
     }

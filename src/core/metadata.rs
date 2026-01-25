@@ -1,5 +1,4 @@
 use serde::{Deserialize, Serialize};
-use std::env;
 use std::error::Error;
 
 #[derive(Deserialize, Debug)]
@@ -170,31 +169,11 @@ pub async fn fetch_metadata(title: &str, media_type_hint: Option<&str>, pool: &s
 
     if let Some(key) = tmdb_key {
         if !key.is_empty() {
-             match fetch_tmdb_metadata(title, media_type_hint, &key).await {
-                 Ok(meta) => return Ok(meta),
-                 Err(e) => println!("TMDB Fetch failed, falling back to OMDB: {}", e),
-             }
+             return fetch_tmdb_metadata(title, media_type_hint, &key).await;
         }
     }
 
-    // 2. Fallback to OMDB
-    // Try to get API key from DB
-    let api_key: Option<String> = sqlx::query_scalar("SELECT value FROM settings WHERE key = 'omdb_api_key'")
-        .fetch_optional(pool)
-        .await
-        .unwrap_or(None);
-
-    // Fallback to Env Ref (optional, or just error if missing)
-    let api_key = api_key.or(env::var("OMDB_API_KEY").ok()).ok_or("No API Key found (TMDB or OMDB)")?;
-
-    let url = format!("http://www.omdbapi.com/?t={}&apikey={}", title, api_key);
-
-    let resp = reqwest::get(&url)
-        .await?
-        .json::<OmdbResponse>()
-        .await?;
-
-    Ok(resp)
+    Err("TMDB API Key not configured or fetch failed".into())
 }
 
 async fn fetch_tmdb_metadata(title: &str, media_type: Option<&str>, api_key: &str) -> Result<OmdbResponse, Box<dyn Error + Send + Sync>> {

@@ -1,13 +1,18 @@
 pub mod models;
 
-use sqlx::sqlite::{SqlitePool, SqlitePoolOptions, SqliteConnectOptions};
+use sqlx::sqlite::{Sqlite, SqlitePool, SqlitePoolOptions, SqliteConnectOptions};
+use sqlx::migrate::MigrateDatabase;
 use std::str::FromStr;
-use std::env;
 
 pub async fn init_db() -> SqlitePool {
-    let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
-    
-    let options = SqliteConnectOptions::from_str(&database_url)
+    let database_url = "sqlite:vortex_server.db";
+
+    if !Sqlite::database_exists(database_url).await.unwrap_or(false) {
+        println!("Creating database {}", database_url);
+        Sqlite::create_database(database_url).await.unwrap();
+    }
+
+    let options = SqliteConnectOptions::from_str(database_url)
         .expect("Failed to parse DATABASE_URL")
         .create_if_missing(true);
 

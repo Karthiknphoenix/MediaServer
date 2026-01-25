@@ -32,3 +32,5 @@ src/check_db.rs
 # Agent Artifacts
 .gemini/
 .agent/
+
+/thumbnails

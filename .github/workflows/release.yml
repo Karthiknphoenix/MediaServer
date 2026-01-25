@@ -28,11 +28,11 @@ jobs:
             asset_name: vortex_server_arm64.deb
             use_cross: true
             package_deb: true
-          - target: x86_64-pc-windows-msvc
-            os: windows-latest
-            asset_name: vortex_server.exe
-            use_cross: false
-            package_deb: false
+#           - target: x86_64-pc-windows-msvc
+#             os: windows-latest
+#             asset_name: vortex_server.exe
+#             use_cross: false
+#             package_deb: false
 
     steps:
       - uses: actions/checkout@v4
@@ -85,6 +85,6 @@ jobs:
           files: |
             vortex_server_amd64.deb/vortex_server_amd64.deb
             vortex_server_arm64.deb/vortex_server_arm64.deb
-            vortex_server.exe/vortex_server.exe
+#            vortex_server.exe/vortex_server.exe
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

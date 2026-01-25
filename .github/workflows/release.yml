@@ -24,9 +24,9 @@ jobs:
             use_cross: false
             package_deb: true
           - target: aarch64-unknown-linux-gnu
-            os: ubuntu-latest
+            os: ubuntu-24.04-arm64
             asset_name: vortex_server_arm64.deb
-            use_cross: true
+            use_cross: false
             package_deb: true
 #           - target: x86_64-pc-windows-msvc
 #             os: windows-latest

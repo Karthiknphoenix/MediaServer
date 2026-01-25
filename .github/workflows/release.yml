@@ -82,11 +82,10 @@ jobs:
       - uses: actions/download-artifact@v4
       
       - name: Create Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
+          token: ${{ secrets.GITHUB_TOKEN }}
           files: |
             vortex_server_amd64.deb/vortex_server_amd64.deb
             vortex_server_arm64.deb/vortex_server_arm64.deb
             vortex_server.exe/vortex_server.exe
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

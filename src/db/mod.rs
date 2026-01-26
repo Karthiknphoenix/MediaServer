@@ -110,17 +110,23 @@ pub async fn init_db() -> SqlitePool {
         let _ = sqlx::query("ALTER TABLE media ADD COLUMN episode_number INTEGER").execute(&pool).await;
     }
 
-    // Migration: Add tmdb_id if it doesn't exist
-    let has_tmdb_id: Option<i64> = sqlx::query_scalar(
-        "SELECT 1 FROM pragma_table_info('media') WHERE name = 'tmdb_id'"
+    // Migration: Add provider_ids if it doesn't exist
+    let has_provider_ids: Option<i64> = sqlx::query_scalar(
+        "SELECT 1 FROM pragma_table_info('media') WHERE name = 'provider_ids'"
     )
     .fetch_optional(&pool)
     .await
     .unwrap_or(None);
 
-    if has_tmdb_id.is_none() {
-        println!("Migrating database: Adding tmdb_id to media table");
-        let _ = sqlx::query("ALTER TABLE media ADD COLUMN tmdb_id INTEGER").execute(&pool).await;
+    if has_provider_ids.is_none() {
+        println!("Migrating database: Adding provider_ids to media table");
+        let _ = sqlx::query("ALTER TABLE media ADD COLUMN provider_ids TEXT").execute(&pool).await;
+        
+        // Migrate existing tmdb_id to provider_ids
+        println!("Migrating database: Moving tmdb_id data to provider_ids");
+        let _ = sqlx::query(
+            "UPDATE media SET provider_ids = '{\"tmdb\":' || tmdb_id || '}' WHERE tmdb_id IS NOT NULL AND provider_ids IS NULL"
+        ).execute(&pool).await;
     }
 
     // Migration: Add backdrop_url if it doesn't exist

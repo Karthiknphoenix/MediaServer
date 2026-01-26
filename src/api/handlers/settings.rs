@@ -4,7 +4,7 @@ use axum::{
     Json,
 };
 use sqlx::SqlitePool;
-use crate::api::error::AppError;
+use crate::error::AppError;
 use crate::db::models::Setting;
 
 #[derive(serde::Deserialize)]

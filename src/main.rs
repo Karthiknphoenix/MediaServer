@@ -1,6 +1,10 @@
 mod db;
 mod api;
 mod core;
+mod models;
+mod dtos;
+mod providers;
+pub mod error;
 
 
 use std::net::SocketAddr;

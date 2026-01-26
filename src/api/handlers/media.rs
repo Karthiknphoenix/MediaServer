@@ -3,9 +3,9 @@ use axum::{
     Json,
 };
 use sqlx::SqlitePool;
-use crate::api::error::AppError;
+use crate::error::AppError;
 use crate::core::media_service;
-use crate::db::models::Media;
+use crate::models::db::media::Media;
 
 pub async fn get_library_media(
     Path(id): Path<i64>,
@@ -36,7 +36,7 @@ pub async fn get_recently_added(State(pool): State<SqlitePool>) -> Result<Json<V
             media.series_name,
             NULL as season_number,
             NULL as episode_number,
-            NULL as tmdb_id,
+            NULL as provider_ids,
             (CASE WHEN media.series_name IS NOT NULL THEN 
                 (SELECT backdrop_url FROM media m2 WHERE m2.series_name = media.series_name AND m2.backdrop_url IS NOT NULL LIMIT 1)
              ELSE media.backdrop_url END) as backdrop_url,
@@ -103,61 +103,70 @@ pub async fn refresh_media_metadata(
     get_media_details(State(pool), Path(id)).await
 }
 
-#[derive(serde::Deserialize)]
-pub struct SearchQuery {
-    query: String,
-    media_type: Option<String>,
-}
+use crate::dtos::requests::{SearchQuery, IdentifyRequest};
 
-pub async fn search_tmdb_handler(
+pub async fn search_handler(
     State(pool): State<SqlitePool>,
     axum::extract::Query(params): axum::extract::Query<SearchQuery>,
-) -> Result<Json<Vec<crate::core::metadata::TmdbSearchResult>>, AppError> {
-    use crate::core::metadata::{search_tmdb, fetch_tmdb_by_id, TmdbSearchResult};
-
-    let key = media_service::get_tmdb_api_key(&pool).await?
-        .ok_or_else(|| AppError::BadRequest("TMDB API key not configured".to_string()))?;
+) -> Result<Json<Vec<crate::models::metadata::NormalizedMetadata>>, AppError> {
+    use crate::core::metadata::{search, fetch_by_id};
 
     let media_type = params.media_type.as_deref();
     
-    // Check if query is a numeric TMDB ID
-    if let Ok(tmdb_id) = params.query.trim().parse::<i64>() {
-        let meta = fetch_tmdb_by_id(tmdb_id, media_type, &key).await?;
-        let result = TmdbSearchResult {
-            id: tmdb_id,
-            title: meta.title,
-            year: meta.year,
-            poster_url: meta.poster,
-            overview: meta.plot,
-        };
-        Ok(Json(vec![result]))
+    // Check if query is a numeric ID
+    if let Ok(id) = params.query.trim().parse::<i64>() {
+        let meta = fetch_by_id(&id.to_string(), media_type, &pool).await?;
+        Ok(Json(vec![meta]))
     } else {
-        let results = search_tmdb(&params.query, media_type, &key).await?;
+        let results = search(&params.query, media_type, &pool).await?;
         Ok(Json(results))
     }
 }
 
-#[derive(serde::Deserialize)]
-pub struct IdentifyRequest {
-    tmdb_id: i64,
-    media_type: Option<String>,
-}
 
 pub async fn identify_media(
     State(pool): State<SqlitePool>,
     Path(id): Path<i64>,
     Json(payload): Json<IdentifyRequest>,
 ) -> Result<Json<Media>, AppError> {
-    use crate::core::metadata::fetch_tmdb_by_id;
-
-    let key = media_service::get_tmdb_api_key(&pool).await?
-        .ok_or_else(|| AppError::BadRequest("TMDB API key not configured".to_string()))?;
+    use crate::core::metadata::fetch_by_id;
 
     let media_type = payload.media_type.as_deref();
-    let meta = fetch_tmdb_by_id(payload.tmdb_id, media_type, &key).await?;
+    let meta = fetch_by_id(&payload.provider_id, media_type, &pool).await?;
 
     media_service::update_media_metadata(&pool, id, &meta).await?;
     
     get_media_details(State(pool), Path(id)).await
 }
 
+pub async fn search_library(
+    State(pool): State<SqlitePool>,
+    axum::extract::Query(params): axum::extract::Query<SearchQuery>,
+) -> Result<Json<Vec<Media>>, AppError> {
+    let query_param = format!("%{}%", params.query);
+    
+    let mut sql = String::from(
+        "SELECT m.*, l.library_type FROM media m 
+         JOIN libraries l ON m.library_id = l.id 
+         WHERE (m.title LIKE ? OR m.series_name LIKE ? OR m.plot LIKE ?)"
+    );
+
+    if params.media_type.is_some() {
+        sql.push_str(" AND m.media_type = ?");
+    }
+
+    sql.push_str(" ORDER BY m.title ASC");
+
+    let mut db_query = sqlx::query_as::<_, Media>(&sql)
+        .bind(&query_param)
+        .bind(&query_param)
+        .bind(&query_param);
+
+    if let Some(media_type) = &params.media_type {
+        db_query = db_query.bind(media_type);
+    }
+
+    let media = db_query.fetch_all(&pool).await?;
+    
+    Ok(Json(media))
+}

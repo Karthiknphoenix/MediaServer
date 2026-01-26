@@ -20,7 +20,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import coil.compose.AsyncImage
-import org.knp.vortex.data.remote.TmdbSearchResultDto
+import org.knp.vortex.data.remote.MetadataSearchResultDto
 import org.knp.vortex.ui.theme.DeepBackground
 import org.knp.vortex.ui.theme.PrimaryBlue
 
@@ -30,6 +30,7 @@ fun IdentifyScreen(
     mediaId: Long,
     initialTitle: String,
     mediaType: String?,
+    seriesName: String? = null,
     onBack: () -> Unit,
     onIdentified: () -> Unit,
     viewModel: IdentifyViewModel = hiltViewModel()
@@ -67,7 +68,7 @@ fun IdentifyScreen(
                 org.knp.vortex.ui.components.GlassyTextField(
                     value = uiState.searchQuery,
                     onValueChange = { viewModel.updateQuery(it) },
-                    label = "Search TMDB...",
+                    label = "Search Metadata...",
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
                     trailingIcon = {
@@ -92,7 +93,22 @@ fun IdentifyScreen(
                         items(uiState.searchResults) { result ->
                             SearchResultCard(
                                 result = result,
-                                onClick = { viewModel.identify(mediaId, result.id, mediaType) }
+                                onClick = { 
+                                    // Extract the best provider ID safely
+                                    val tmdb = result.provider_ids?.get("tmdb")
+                                    val providerId = when (tmdb) {
+                                        is Number -> tmdb.toLong().toString() // handle 1234.0 case
+                                        is String -> tmdb
+                                        else -> result.provider_ids?.entries?.firstOrNull()?.let { entry ->
+                                            val value = entry.value
+                                            if (value is Number) value.toLong().toString() else value.toString()
+                                        }
+                                    }
+                                    
+                                    if (providerId != null) {
+                                        viewModel.identify(mediaId, providerId, mediaType, seriesName)
+                                    }
+                                }
                             )
                         }
                     }
@@ -103,7 +119,7 @@ fun IdentifyScreen(
 }
 
 @Composable
-fun SearchResultCard(result: TmdbSearchResultDto, onClick: () -> Unit) {
+fun SearchResultCard(result: MetadataSearchResultDto, onClick: () -> Unit) {
     org.knp.vortex.ui.components.GlassyCard(
         modifier = Modifier.fillMaxWidth(),
         onClick = onClick,
@@ -127,7 +143,7 @@ fun SearchResultCard(result: TmdbSearchResultDto, onClick: () -> Unit) {
                     fontWeight = FontWeight.Bold,
                     color = Color.White
                 )
-                if (result.year.isNotEmpty()) {
+                if (!result.year.isNullOrEmpty()) {
                     Text(
                         text = result.year,
                         style = MaterialTheme.typography.bodySmall,
@@ -136,7 +152,7 @@ fun SearchResultCard(result: TmdbSearchResultDto, onClick: () -> Unit) {
                 }
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    text = result.overview,
+                    text = result.plot ?: "No Description",
                     style = MaterialTheme.typography.bodySmall,
                     color = Color.Gray,
                     maxLines = 4,

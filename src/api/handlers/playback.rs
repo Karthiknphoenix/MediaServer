@@ -9,7 +9,7 @@ use sqlx::{SqlitePool, FromRow};
 use tokio::fs::File;
 use tokio::io::{AsyncReadExt, AsyncSeekExt, SeekFrom};
 use serde::{Serialize, Deserialize};
-use crate::api::error::AppError;
+use crate::error::AppError;
 
 #[derive(serde::Deserialize)]
 pub struct UpdateProgressRequest {
@@ -31,7 +31,7 @@ pub struct MediaWithProgress {
     pub series_name: Option<String>,
     pub season_number: Option<i32>,
     pub episode_number: Option<i32>,
-    pub tmdb_id: Option<i64>,
+    pub provider_ids: Option<String>,
     pub backdrop_url: Option<String>,
     pub still_url: Option<String>,
     pub runtime: Option<i32>,

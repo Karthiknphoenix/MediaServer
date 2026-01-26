@@ -2,36 +2,35 @@
 //! This module reduces code duplication between movie and TV handlers.
 
 use sqlx::SqlitePool;
-use crate::api::error::AppError;
-use crate::core::metadata::OmdbResponse;
+use crate::error::AppError;
+use crate::models::metadata::NormalizedMetadata;
 
-/// Fetch the TMDB API key from settings.
-pub async fn get_tmdb_api_key(pool: &SqlitePool) -> Result<Option<String>, AppError> {
-    let api_key: Option<String> = sqlx::query_scalar("SELECT value FROM settings WHERE key = 'tmdb_api_key'")
-        .fetch_optional(pool)
-        .await?;
-    Ok(api_key.filter(|k| !k.is_empty()))
-}
 
 /// Update a single media item (movie or episode) with fetched metadata.
 pub async fn update_media_metadata(
     pool: &SqlitePool,
     id: i64,
-    meta: &OmdbResponse,
+    meta: &NormalizedMetadata,
 ) -> Result<(), AppError> {
     let genres_str = meta.genres.as_ref().map(|g| g.join(", "));
     
+    // Parse year safely
+    let year = meta.year.as_ref()
+        .and_then(|y| y.parse::<i64>().ok())
+        .unwrap_or(0);
+
     sqlx::query(
-        "UPDATE media SET title = ?, year = ?, poster_url = ?, backdrop_url = ?, plot = ?, media_type = ?, runtime = ?, genres = ? WHERE id = ?"
+        "UPDATE media SET title = ?, year = ?, poster_url = ?, backdrop_url = ?, plot = ?, media_type = ?, runtime = ?, genres = ?, provider_ids = ? WHERE id = ?"
     )
     .bind(&meta.title)
-    .bind(&meta.year.parse::<i64>().unwrap_or(0))
-    .bind(&meta.poster)
-    .bind(&meta.backdrop)
+    .bind(year)
+    .bind(&meta.poster_url)
+    .bind(&meta.backdrop_url)
     .bind(&meta.plot)
     .bind(&meta.media_type)
     .bind(meta.runtime)
     .bind(genres_str)
+    .bind(meta.provider_ids.as_ref().map(|v| v.to_string()))
     .bind(id)
     .execute(pool)
     .await?;
@@ -43,19 +42,23 @@ pub async fn update_media_metadata(
 pub async fn update_series_metadata(
     pool: &SqlitePool,
     series_name: &str,
-    meta: &OmdbResponse,
+    meta: &NormalizedMetadata,
 ) -> Result<(), AppError> {
     let genres_str = meta.genres.as_ref().map(|g| g.join(", "));
     
+    let year = meta.year.as_ref()
+        .and_then(|y| y.parse::<i64>().ok())
+        .unwrap_or(0);
+    
     sqlx::query(
-        "UPDATE media SET poster_url = ?, backdrop_url = ?, plot = ?, year = ?, genres = ?, tmdb_id = ? WHERE series_name = ?"
+        "UPDATE media SET poster_url = ?, backdrop_url = ?, plot = ?, year = ?, genres = ?, provider_ids = ? WHERE series_name = ?"
     )
-    .bind(&meta.poster)
-    .bind(&meta.backdrop)
+    .bind(&meta.poster_url)
+    .bind(&meta.backdrop_url)
     .bind(&meta.plot)
-    .bind(&meta.year.parse::<i64>().unwrap_or(0))
+    .bind(year)
     .bind(genres_str)
-    .bind(meta.tmdb_id)
+    .bind(meta.provider_ids.as_ref().map(|v| v.to_string()))
     .bind(series_name)
     .execute(pool)
     .await?;

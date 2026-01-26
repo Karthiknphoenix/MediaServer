@@ -1,6 +1,6 @@
 pub mod common;
 pub mod library;
-pub mod movies;
+pub mod media;
 pub mod playback;
 pub mod tv;
 pub mod settings;

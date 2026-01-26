@@ -63,6 +63,9 @@ interface MediaApi {
     @GET("$API_VERSION/series/{name}/season/{num}")
     suspend fun getSeasonEpisodes(@Path("name") name: String, @Path("num") num: Int): List<EpisodeDto>
 
+    @POST("$API_VERSION/series/{name}/identify")
+    suspend fun identifySeries(@Path("name") name: String, @Body request: IdentifyRequest): SeriesDetailDto
+
     // Settings endpoints
     @GET("$API_VERSION/settings")
     suspend fun getSettings(): List<SettingDto>
@@ -73,8 +76,11 @@ interface MediaApi {
     @POST("$API_VERSION/reset")
     suspend fun resetDatabase()
 
-    @GET("$API_VERSION/tmdb/search")
-    suspend fun searchTmdb(@Query("query") query: String, @Query("media_type") mediaType: String?): List<TmdbSearchResultDto>
+    @GET("$API_VERSION/metadata/search")
+    suspend fun searchMetadata(@Query("query") query: String, @Query("media_type") mediaType: String?): List<MetadataSearchResultDto>
+
+    @GET("$API_VERSION/library/search")
+    suspend fun searchLibrary(@Query("query") query: String, @Query("media_type") mediaType: String?): List<MediaItemDto>
 
     @POST("$API_VERSION/media/{id}/identify")
     suspend fun identifyMedia(@Path("id") id: Long, @Body request: IdentifyRequest): MediaItemDto
@@ -91,16 +97,17 @@ data class SubtitleTrackDto(
     val url: String
 )
 
-data class TmdbSearchResultDto(
-    val id: Long,
+data class MetadataSearchResultDto(
     val title: String,
-    val year: String,
-    val poster_url: String,
-    val overview: String
+    val year: String?, // NormalizedMetadata uses Option<String>
+    val poster_url: String?,
+    val plot: String?, // Renamed from overview
+    val provider_ids: Map<String, Any>?,
+    val media_type: String?
 )
 
 data class IdentifyRequest(
-    val tmdb_id: Long,
+    val provider_id: String,
     val media_type: String?
 )
 

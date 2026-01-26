@@ -2,7 +2,7 @@ package org.knp.vortex.ui.screens.identify
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import org.knp.vortex.data.remote.TmdbSearchResultDto
+import org.knp.vortex.data.remote.MetadataSearchResultDto
 import org.knp.vortex.data.repository.MediaRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -13,7 +13,7 @@ import javax.inject.Inject
 
 data class IdentifyUiState(
     val searchQuery: String = "",
-    val searchResults: List<TmdbSearchResultDto> = emptyList(),
+    val searchResults: List<MetadataSearchResultDto> = emptyList(),
     val isLoading: Boolean = false,
     val isIdentifying: Boolean = false,
     val identifySuccess: Boolean = false,
@@ -38,7 +38,7 @@ class IdentifyViewModel @Inject constructor(
 
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true, error = null)
-            repository.searchTmdb(query, mediaType)
+            repository.searchMetadata(query, mediaType)
                 .onSuccess { results ->
                     _uiState.value = _uiState.value.copy(searchResults = results, isLoading = false)
                 }
@@ -48,11 +48,17 @@ class IdentifyViewModel @Inject constructor(
         }
     }
 
-    fun identify(localMediaId: Long, tmdbId: Long, mediaType: String?) {
+    fun identify(localMediaId: Long, providerId: String, mediaType: String?, seriesName: String? = null) {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isIdentifying = true)
-            repository.identifyMedia(localMediaId, tmdbId, mediaType)
-                .onSuccess {
+            
+            val result = if (localMediaId == 0L && !seriesName.isNullOrEmpty()) {
+                repository.identifySeries(seriesName, providerId, mediaType)
+            } else {
+                repository.identifyMedia(localMediaId, providerId, mediaType)
+            }
+
+            result.onSuccess {
                     _uiState.value = _uiState.value.copy(isIdentifying = false, identifySuccess = true)
                 }
                 .onFailure {

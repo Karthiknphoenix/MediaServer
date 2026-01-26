@@ -303,20 +303,29 @@ fun AppNavigation() {
         }
 
         composable(
-            route = "identify/{mediaId}/{title}/{mediaType}",
+            route = "identify/{mediaId}/{title}/{mediaType}?seriesName={seriesName}",
             arguments = listOf(
                 navArgument("mediaId") { type = NavType.LongType },
                 navArgument("title") { type = NavType.StringType },
-                navArgument("mediaType") { type = NavType.StringType }
+                navArgument("mediaType") { type = NavType.StringType },
+                navArgument("seriesName") { 
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = null
+                }
             )
         ) { backStackEntry ->
             val mediaId = backStackEntry.arguments?.getLong("mediaId") ?: return@composable
             val title = URLDecoder.decode(backStackEntry.arguments?.getString("title") ?: "", StandardCharsets.UTF_8.toString())
             val mediaType = URLDecoder.decode(backStackEntry.arguments?.getString("mediaType") ?: "", StandardCharsets.UTF_8.toString())
+            val seriesName = backStackEntry.arguments?.getString("seriesName")?.let {
+                URLDecoder.decode(it, StandardCharsets.UTF_8.toString())
+            }
             IdentifyScreen(
                 mediaId = mediaId,
                 initialTitle = title,
                 mediaType = mediaType,
+                seriesName = seriesName,
                 onBack = { navController.popBackStack() },
                 onIdentified = { navController.popBackStack() }
             )
@@ -332,7 +341,7 @@ fun AppNavigation() {
                 onBack = { navController.popBackStack() },
                 onIdentify = { name ->
                     val encodedTitle = URLEncoder.encode(name, StandardCharsets.UTF_8.toString())
-                    navController.navigate("identify/0/$encodedTitle/tv")
+                    navController.navigate("identify/0/$encodedTitle/tv?seriesName=$encodedTitle")
                 },
                 onPlayEpisode = { id -> navController.navigate("player/$id") }
             )

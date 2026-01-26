@@ -56,12 +56,10 @@ fun HomeScreen(
     onOpenSeries: (String) -> Unit,
     onOpenLibrary: (Long, String, String) -> Unit,  // id, name, type
     onOpenSettings: () -> Unit,
-    onManageLibraries: () -> Unit,
+    onQuickPlay: (Long) -> Unit, // New callback for direct playback
     viewModel: HomeViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
-    val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
-    val scope = rememberCoroutineScope()
     val pullToRefreshState = rememberPullToRefreshState()
     
     // PIN Dialog state
@@ -172,7 +170,16 @@ fun HomeScreen(
             containerColor = Color.Transparent,
             topBar = {
                 org.knp.vortex.ui.components.AppHeader(
-                    onLogoLongClick = { showPinDialog = true }
+                    onLogoLongClick = { showPinDialog = true },
+                    actions = {
+                        IconButton(onClick = onOpenSettings) {
+                            Icon(
+                                imageVector = Icons.Default.Settings,
+                                contentDescription = "Settings",
+                                tint = Color.White
+                            )
+                        }
+                    }
                 )
             }
         ) { padding ->
@@ -200,7 +207,25 @@ fun HomeScreen(
                         verticalArrangement = Arrangement.spacedBy(24.dp)
                     ) {
                         item {
-                            val featuredItems = (uiState.allSeries.take(5) + uiState.recentlyAdded.take(3)).shuffled().take(5)
+                            val rawItems = (uiState.allSeries.take(5) + uiState.recentlyAdded.take(5))
+                            val featuredItems = rawItems
+                                .distinctBy { item: Any ->
+                                    val name = when(item) {
+                                        is SeriesDto -> item.name
+                                        is MediaItemDto -> {
+                                            if (item.media_type == "series" || item.series_name != null) {
+                                                 item.series_name ?: item.title ?: ""
+                                            } else {
+                                                 item.title ?: ""
+                                            }
+                                        }
+                                        else -> item.hashCode().toString()
+                                    }
+                                    name.lowercase().trim()
+                                }
+                                .shuffled()
+                                .take(5)
+
                             if (featuredItems.isNotEmpty()) {
                                 FeaturedCarousel(
                                     items = featuredItems,
@@ -233,11 +258,8 @@ fun HomeScreen(
                                             posterUrl = item.poster_url,
                                             year = item.year,
                                             onClick = {
-                                                if (item.media_type == "series") {
-                                                    onOpenSeries(item.series_name ?: item.title ?: "")
-                                                } else {
-                                                    onPlayMedia(item.id, item.library_type)
-                                                }
+                                                // Quick Play for Continue Watching
+                                                onQuickPlay(item.id)
                                             },
                                             modifier = Modifier.width(160.dp),
                                             videoUrl = if (item.poster_url == null) "${uiState.serverUrl}/api/v1/stream/${item.id}" else null
@@ -408,11 +430,21 @@ fun FeaturedCarousel(
             horizontalArrangement = Arrangement.Center
         ) {
             repeat(items.size) { index ->
-                val color = if (pagerState.currentPage == index) PrimaryBlue else GrayText
+                val isSelected = pagerState.currentPage == index
+                val width by androidx.compose.animation.core.animateDpAsState(
+                    targetValue = if (isSelected) 24.dp else 8.dp,
+                    label = "DotWidth"
+                )
+                val color by androidx.compose.animation.animateColorAsState(
+                    targetValue = if (isSelected) PrimaryBlue else GrayText.copy(alpha = 0.5f),
+                    label = "DotColor"
+                )
+                
                 Box(
                     modifier = Modifier
                         .padding(horizontal = 4.dp)
-                        .size(8.dp)
+                        .height(8.dp)
+                        .width(width)
                         .clip(RoundedCornerShape(50))
                         .background(color)
                 )

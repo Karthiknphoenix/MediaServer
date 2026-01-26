@@ -135,7 +135,11 @@ fun MovieDetailScreen(
                                 
                                 Spacer(modifier = Modifier.width(16.dp))
                                 
-                                Column(modifier = Modifier.padding(bottom = 8.dp)) {
+                                Column(
+                                    modifier = Modifier
+                                        .padding(bottom = 8.dp)
+                                        .weight(1f) // Fix: Take remaining space
+                                ) {
                                     Text(
                                         text = media.title ?: "Unknown",
                                         style = MaterialTheme.typography.headlineMedium,
@@ -166,9 +170,12 @@ fun MovieDetailScreen(
 
                                     if (!media.genres.isNullOrEmpty()) {
                                         Spacer(modifier = Modifier.height(8.dp))
-                                        Row(
+                                        // Fix: FlowRow for wrapping genres
+                                        @OptIn(ExperimentalLayoutApi::class)
+                                        FlowRow(
                                             modifier = Modifier.fillMaxWidth(),
-                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                            verticalArrangement = Arrangement.spacedBy(8.dp)
                                         ) {
                                             media.genres.split(", ").take(3).forEach { genre ->
                                                 MetadataChip(text = genre, backgroundColor = PrimaryBlue.copy(alpha = 0.2f))

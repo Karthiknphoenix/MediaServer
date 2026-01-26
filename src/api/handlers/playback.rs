@@ -297,18 +297,7 @@ pub async fn get_thumbnail(
     Path(id): Path<i64>,
     State(pool): State<SqlitePool>,
 ) -> Result<impl IntoResponse, AppError> {
-    // 1. Get media file path
-    let result: Option<(String,)> = sqlx::query_as("SELECT file_path FROM media WHERE id = ?")
-        .bind(id)
-        .fetch_optional(&pool)
-        .await?;
-
-    let file_path = match result {
-        Some((path,)) => path,
-        None => return Err(AppError::NotFound("Media not found".to_string())),
-    };
-
-    // 2. Check for cached thumbnail
+    // 1. Check for cached thumbnail
     let thumb_dir = std::path::Path::new("thumbnails");
     if !thumb_dir.exists() {
         let _ = std::fs::create_dir(thumb_dir);
@@ -317,53 +306,100 @@ pub async fn get_thumbnail(
     let thumb_filename = format!("{}.jpg", id);
     let thumb_path = thumb_dir.join(&thumb_filename);
 
-    // 3. Generate if not cached
     if !thumb_path.exists() {
-        // Find FFmpeg - check common locations first
-        let ffmpeg_paths = [
-            "C:\\ffmpeg\\bin\\ffmpeg.exe",  // Common Windows install
-            "./ffmpeg/ffmpeg.exe",           // Bundled with server (Windows)
-            "./ffmpeg/ffmpeg",               // Bundled with server (Linux/Mac)
-            "ffmpeg",                        // System PATH
-        ];
-        
-        let ffmpeg_cmd = ffmpeg_paths.iter()
-            .find(|p| std::path::Path::new(p).exists() || *p == &"ffmpeg")
-            .unwrap_or(&"ffmpeg");
-        
-        tracing::info!("Using FFmpeg at: {}", ffmpeg_cmd);
-        
-        // Run FFmpeg: extract frame at 1 second
-        let output = std::process::Command::new(ffmpeg_cmd)
-            .arg("-i")
-            .arg(&file_path)
-            .arg("-ss")
-            .arg("00:00:05.000")
-            .arg("-vframes")
-            .arg("1")
-            .arg("-vf")
-            .arg("scale=320:-1") // Limit width to 320px for smaller files
-            .arg(&thumb_path)
-            .arg("-y")
-            .output();
+        // 2. Get media file path and metadata
+        let result: Option<(String, Option<String>, Option<String>)> = sqlx::query_as(
+            "SELECT file_path, poster_url, backdrop_url FROM media WHERE id = ?"
+        )
+            .bind(id)
+            .fetch_optional(&pool)
+            .await?;
 
-        match output {
-            Ok(o) => {
-                if !o.status.success() {
-                    let err = String::from_utf8_lossy(&o.stderr);
-                    tracing::warn!("FFmpeg failed for {}: {}", id, err);
-                    return Err(AppError::Internal(format!("Thumbnail generation failed: {}", err)));
+        let (file_path, poster_url, backdrop_url) = match result {
+            Some(row) => row,
+            None => return Err(AppError::NotFound("Media not found".to_string())),
+        };
+
+        // 3. Try validation/download from metadata
+        let mut generated = false;
+
+        // Try poster first, then backdrop
+        for url_opt in [poster_url, backdrop_url] {
+            if let Some(url) = url_opt {
+                if !url.is_empty() {
+                    // Start download
+                    match reqwest::get(&url).await {
+                        Ok(resp) => {
+                            if resp.status().is_success() {
+                                match resp.bytes().await {
+                                    Ok(bytes) => {
+                                        // Save to thumbnail path
+                                        if let Ok(_) = tokio::fs::write(&thumb_path, &bytes).await {
+                                            tracing::info!("Downloaded thumbnail for {} from {}", id, url);
+                                            generated = true;
+                                            break;
+                                        }
+                                    },
+                                    Err(e) => tracing::warn!("Failed to get bytes for {} from {}: {}", id, url, e)
+                                }
+                            }
+                        },
+                        Err(e) => tracing::warn!("Failed to download thumbnail for {} from {}: {}", id, url, e)
+                    }
                 }
             }
-            Err(e) => {
-                return Err(AppError::Internal(format!("Failed to execute FFmpeg: {}. Is FFmpeg installed?", e)));
+        }
+
+        // 4. Fallback to FFmpeg if needed
+        if !generated {
+             // Find FFmpeg - check common locations first
+            let ffmpeg_paths = [
+                "C:\\ffmpeg\\bin\\ffmpeg.exe",  // Common Windows install
+                "./ffmpeg/ffmpeg.exe",           // Bundled with server (Windows)
+                "./ffmpeg/ffmpeg",               // Bundled with server (Linux/Mac)
+                "ffmpeg",                        // System PATH
+            ];
+            
+            let ffmpeg_cmd = ffmpeg_paths.iter()
+                .find(|p| std::path::Path::new(p).exists() || *p == &"ffmpeg")
+                .unwrap_or(&"ffmpeg");
+            
+            tracing::info!("Generating thumbnail for {} using FFmpeg", id);
+            
+            // Run FFmpeg asynchronously: extract frame at 5 seconds
+            // Optimized: -ss before -i for fast input seeking
+            let output = tokio::process::Command::new(ffmpeg_cmd)
+                .arg("-ss")
+                .arg("00:00:05.000")
+                .arg("-i")
+                .arg(&file_path)
+                .arg("-vframes")
+                .arg("1")
+                .arg("-vf")
+                .arg("scale=320:-1") // Limit width to 320px for smaller files
+                .arg(&thumb_path)
+                .arg("-y")
+                .output()
+                .await; // .await here needed for tokio process
+
+            match output {
+                Ok(o) => {
+                    if !o.status.success() {
+                        let err = String::from_utf8_lossy(&o.stderr);
+                        tracing::warn!("FFmpeg failed for {}: {}", id, err);
+                        // Don't return error yet, let it fall through to "Failed to read" if file wasn't created
+                    }
+                }
+                Err(e) => {
+                     tracing::error!("Failed to execute FFmpeg: {}", e);
+                }
             }
         }
     }
 
-    // 4. Read and return the thumbnail
+    // 5. Read and return the thumbnail
     let thumb_bytes = tokio::fs::read(&thumb_path).await
-        .map_err(|_| AppError::Internal("Failed to read thumbnail".to_string()))?;
+        .map_err(|_| AppError::Internal("Failed to read (or generate) thumbnail".to_string()))?;
 
     let mut headers = HeaderMap::new();
     headers.insert(header::CONTENT_TYPE, "image/jpeg".parse().unwrap());

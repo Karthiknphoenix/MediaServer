@@ -18,6 +18,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.ui.unit.dp
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Fullscreen
+import androidx.compose.material.icons.filled.FullscreenExit
 import androidx.media3.common.MediaItem
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
@@ -29,6 +31,7 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import androidx.hilt.navigation.compose.hiltViewModel
+import org.knp.vortex.utils.findActivity
 
 // Note: In a real app, inject Repo via ViewModel. Using direct logic here for brevity if simple service.
 // But better to use ViewModel. 
@@ -167,9 +170,10 @@ fun PlayerScreen(
         }
     }
 
-    // Lifecycle handling
     // Lifecycle handling & Full Screen Mode
     val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    var isFullscreen by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) } // Default to false (Portrait/Normal)
+
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_PAUSE) {
@@ -178,33 +182,41 @@ fun PlayerScreen(
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
-        
-        // Lock to Landscape & Hide System Bars
-        val activity = context as? android.app.Activity
-        val originalOrientation = activity?.requestedOrientation
-        
-        activity?.requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
-        
-        val window = activity?.window
-        if (window != null) {
-            androidx.core.view.WindowCompat.setDecorFitsSystemWindows(window, false)
-            androidx.core.view.WindowInsetsControllerCompat(window, window.decorView).let { controller ->
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+            exoPlayer.release()
+        }
+    }
+    
+    // Handle Fullscreen State Side-effects
+    val activity = context.findActivity()
+    val window = activity?.window
+
+    DisposableEffect(isFullscreen) {
+        if (activity != null && window != null) {
+            val controller = androidx.core.view.WindowInsetsControllerCompat(window, window.decorView)
+            
+            if (isFullscreen) {
+                // Enter Landscape & Fullscreen
+                activity.requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+                androidx.core.view.WindowCompat.setDecorFitsSystemWindows(window, false)
                 controller.hide(androidx.core.view.WindowInsetsCompat.Type.systemBars())
                 controller.systemBarsBehavior = androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            } else {
+                // Exit Landscape & Fullscreen
+                activity.requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+                androidx.core.view.WindowCompat.setDecorFitsSystemWindows(window, true)
+                controller.show(androidx.core.view.WindowInsetsCompat.Type.systemBars())
             }
         }
 
         onDispose {
-            lifecycleOwner.lifecycle.removeObserver(observer)
-            exoPlayer.release()
-            
-            // Restore Orientation & System Bars
-            activity?.requestedOrientation = originalOrientation ?: android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
-            
-            if (window != null) {
-                androidx.core.view.WindowCompat.setDecorFitsSystemWindows(window, true)
-                androidx.core.view.WindowInsetsControllerCompat(window, window.decorView).show(androidx.core.view.WindowInsetsCompat.Type.systemBars())
-            }
+            // Reset on cleanup (back press)
+             if (activity != null && window != null) {
+                 activity.requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+                 androidx.core.view.WindowCompat.setDecorFitsSystemWindows(window, true)
+                 androidx.core.view.WindowInsetsControllerCompat(window, window.decorView).show(androidx.core.view.WindowInsetsCompat.Type.systemBars())
+             }
         }
     }
 
@@ -214,6 +226,10 @@ fun PlayerScreen(
                 player = exoPlayer
                 // Enable native subtitle button
                 setShowSubtitleButton(true)
+                // Enable native fullscreen button logic
+                setFullscreenButtonClickListener {
+                    isFullscreen = !isFullscreen
+                }
                 // Hide controller timeout to allow back button visibility if custom UI
                 controllerShowTimeoutMs = 3000
             }

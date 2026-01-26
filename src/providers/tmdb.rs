@@ -84,14 +84,7 @@ impl MetadataProvider for TmdbProvider {
             return Err(AppError::BadRequest("TMDB API Key not set".into()));
         }
 
-        let endpoint = match media_type {
-            Some("movie") => "movie",
-            Some("series") | Some("tv") => "tv",
-            _ => {
-                // Determine or fallback/guess (try movie first) -> Logic moved below
-                "movie"
-            }
-        };
+
 
         // If hint provided, try that specific one. If generic, try movie then tv?
         if let Some(t) = media_type {

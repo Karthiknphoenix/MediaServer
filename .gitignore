@@ -34,3 +34,6 @@ src/check_db.rs
 .agent/
 
 /thumbnails
+vortex_server.db
+vortex_server.db-shm
+vortex_server.db-wal

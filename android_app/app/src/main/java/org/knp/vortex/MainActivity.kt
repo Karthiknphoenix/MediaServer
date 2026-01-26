@@ -126,7 +126,6 @@ class MainActivity : FragmentActivity() {
 fun AppNavigation() {
     val navController = rememberNavController()
     // Define items for Bottom Nav
-    val items = listOf("home" to "Home", "settings" to "Settings") 
     
     // We need current back stack entry to determine selected item
     val navBackStackEntry by navController.currentBackStackEntryAsState()
@@ -200,7 +199,10 @@ fun AppNavigation() {
                     navController.navigate("library/$id/$encodedName/$type")
                 },
                 onOpenSettings = { navController.navigate("settings") },
-                onManageLibraries = { navController.navigate("manage_libraries") }
+                onQuickPlay = { id -> 
+                    // Direct Playback
+                    navController.navigate("player/$id") 
+                }
             )
         }
         
@@ -334,7 +336,7 @@ fun AppNavigation() {
         composable(
             route = "series/{seriesName}/detail",
             arguments = listOf(navArgument("seriesName") { type = NavType.StringType })
-        ) { backStackEntry ->
+        ) { _ ->
             // Unused val encodedName = backStackEntry.arguments?.getString("seriesName") ?: ""
             // Unused: val seriesName = URLDecoder.decode(encodedName, StandardCharsets.UTF_8.toString())
             SeriesDetailScreen(

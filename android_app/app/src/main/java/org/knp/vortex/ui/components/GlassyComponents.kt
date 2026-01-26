@@ -173,21 +173,31 @@ fun ModernMediaCard(
     }
 
     GlassyCard(
-        onClick = onClick,
-        modifier = modifier.aspectRatio(0.67f),
+        modifier = modifier
+            .aspectRatio(0.67f)
+            .bounceClick(onClick = onClick), // Apply bounce click
         shape = RoundedCornerShape(16.dp)
+        // Note: onClick handled by bounceClick now, so we don't pass it to Surface inside GlassyCard or we refactor GlassyCard.
+        // Let's pass null to GlassyCard's onClick to avoid double click handling, since bounceClick handles it.
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
             if (posterUrl != null || videoUrl != null) {
                 var isError by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+                var isLoading by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(true) }
 
                 if (!isError) {
                     AsyncImage(
                         model = imageRequest,
                         contentDescription = title,
-                        modifier = Modifier.fillMaxSize(),
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .shimmerEffect(isActive = isLoading), // Shimmer while loading
                         contentScale = ContentScale.Crop,
-                        onError = { isError = true }
+                        onSuccess = { isLoading = false },
+                        onError = { 
+                            isError = true 
+                            isLoading = false
+                        }
                     )
                 } else {
                     Box(Modifier.fillMaxSize().background(Color.White.copy(alpha = 0.05f)), contentAlignment = Alignment.Center) {

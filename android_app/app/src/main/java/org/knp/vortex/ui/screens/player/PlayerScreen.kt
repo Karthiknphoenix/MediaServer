@@ -232,6 +232,48 @@ fun PlayerScreen(
                 }
                 // Hide controller timeout to allow back button visibility if custom UI
                 controllerShowTimeoutMs = 3000
+                
+                // Keep screen on while playing
+                keepScreenOn = true
+
+                // Gesture Handling
+                val gestureDetector = android.view.GestureDetector(context, object : android.view.GestureDetector.SimpleOnGestureListener() {
+                    override fun onDown(e: android.view.MotionEvent): Boolean {
+                        return true // Consume the event
+                    }
+
+                    override fun onSingleTapConfirmed(e: android.view.MotionEvent): Boolean {
+                        if (isControllerFullyVisible) {
+                            hideController()
+                        } else {
+                            showController()
+                        }
+                        return true
+                    }
+
+                    override fun onDoubleTap(e: android.view.MotionEvent): Boolean {
+                        val width = width.toFloat()
+                        val x = e.x
+                        val currentPos = player?.currentPosition ?: 0L
+                        val duration = player?.duration ?: 0L
+                        
+                        // Seek Forward (Right side)
+                        if (x > width / 2) {
+                            val newPos = (currentPos + 10000).coerceAtMost(duration)
+                            player?.seekTo(newPos)
+                        } 
+                        // Seek Backward (Left side)
+                        else {
+                            val newPos = (currentPos - 10000).coerceAtLeast(0L)
+                            player?.seekTo(newPos)
+                        }
+                        return true
+                    }
+                })
+
+                setOnTouchListener { _, event ->
+                    gestureDetector.onTouchEvent(event)
+                }
             }
         },
         modifier = Modifier.fillMaxSize().background(Color.Black)

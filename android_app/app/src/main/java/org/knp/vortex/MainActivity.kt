@@ -431,12 +431,17 @@ fun AppNavigation() {
         }
         
         composable(
-            route = "reader/{mediaId}",
-            arguments = listOf(navArgument("mediaId") { type = NavType.LongType })
+            route = "reader/{mediaId}?mode={mode}",
+            arguments = listOf(
+                navArgument("mediaId") { type = NavType.LongType },
+                navArgument("mode") { type = NavType.StringType; defaultValue = "Horizontal" }
+            )
         ) { backStackEntry ->
             val mediaId = backStackEntry.arguments?.getLong("mediaId") ?: return@composable
+            val mode = backStackEntry.arguments?.getString("mode") ?: "Horizontal"
             org.knp.vortex.ui.screens.reader.BookReaderScreen(
                 mediaId = mediaId,
+                initialReadingMode = mode,
                 onBack = { navController.popBackStack() }
             )
         }
@@ -452,7 +457,10 @@ fun AppNavigation() {
             org.knp.vortex.ui.screens.series.ComicSeriesDetailScreen(
                 seriesName = seriesName,
                 onBack = { navController.popBackStack() },
-                onPlayChapter = { id -> navController.navigate("reader/$id") },
+                onPlayChapter = { id, readingMode, playlist, index -> 
+                    val playlistStr = playlist.joinToString(",")
+                    navController.navigate("reader/$id?playlist=$playlistStr&index=$index&mode=$readingMode")
+                },
                 onEditMetadata = { name ->
                     val encoded = URLEncoder.encode(name, StandardCharsets.UTF_8.toString())
                     navController.navigate("editcomicseries/$encoded")

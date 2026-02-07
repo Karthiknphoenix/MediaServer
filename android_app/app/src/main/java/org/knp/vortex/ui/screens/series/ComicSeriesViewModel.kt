@@ -45,6 +45,8 @@ class ComicSeriesViewModel @Inject constructor(
     }
 
     fun loadSeries(name: String) {
+        if (_uiState.value.series?.name == name) return
+        
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true, error = null)
             

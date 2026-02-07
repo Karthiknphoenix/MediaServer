@@ -28,14 +28,7 @@ pub struct ComicChapter {
     pub year: Option<i64>,
 }
 
-#[derive(Debug, serde::Deserialize)]
-pub struct UpdateSeriesMetadataRequest {
-    pub poster_url: Option<String>,
-    pub backdrop_url: Option<String>,
-    pub plot: Option<String>,
-    pub year: Option<i64>,
-    pub genres: Option<String>,
-}
+
 
 /// Get all comic series (grouped by series_name)
 pub async fn get_comic_series(

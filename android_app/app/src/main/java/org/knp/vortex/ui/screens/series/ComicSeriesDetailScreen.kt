@@ -45,7 +45,7 @@ import org.knp.vortex.data.remote.ComicChapterDto
 fun ComicSeriesDetailScreen(
     seriesName: String,
     onBack: () -> Unit,
-    onPlayChapter: (Long) -> Unit,
+    onPlayChapter: (Long, String, List<Long>, Int) -> Unit,  // mediaId, readingMode, playlist, index
     onEditMetadata: (String) -> Unit,
     viewModel: ComicSeriesViewModel = hiltViewModel()
 ) {
@@ -101,13 +101,6 @@ fun ComicSeriesDetailScreen(
                                     }
                                 )
                                 DropdownMenuItem(
-                                    text = { Text("Refresh Metadata", color = Color.White) },
-                                    onClick = { 
-                                        viewModel.refreshMetadata()
-                                        showMenu = false
-                                    }
-                                )
-                                DropdownMenuItem(
                                     text = { Text("Reading Style", color = Color.White) },
                                     onClick = { 
                                         showReadingModeDialog = true
@@ -142,7 +135,11 @@ fun ComicSeriesDetailScreen(
                             if (uiState.isSelectionMode) {
                                 viewModel.toggleChapterSelection(id)
                             } else {
-                                onPlayChapter(id)
+                                // Create playlist of chapter IDs
+                                val chapters = series.chapters.sortedBy { it.chapter_number ?: Int.MAX_VALUE }
+                                val playlist = chapters.map { it.id }
+                                val index = playlist.indexOf(id)
+                                onPlayChapter(id, uiState.readingMode, playlist, index)
                             }
                         },
                         onLongPressChapter = { id ->
@@ -404,9 +401,8 @@ fun ComicSeriesContent(
                     }
                     
                     AsyncImage(
-                        model = chapter.poster_url?.let { url ->
-                            if (url.startsWith("/")) "${serverUrl.trimEnd('/')}$url" else url
-                        } ?: "${serverUrl.trimEnd('/')}/api/v1/media/${chapter.id}/thumbnail",
+                        // Always use extracted thumbnail for chapters, not poster_url
+                        model = "${serverUrl.trimEnd('/')}/api/v1/media/${chapter.id}/thumbnail",
                         contentDescription = null,
                         modifier = Modifier
                             .width(60.dp)

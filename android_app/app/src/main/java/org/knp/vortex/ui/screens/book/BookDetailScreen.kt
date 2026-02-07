@@ -291,13 +291,6 @@ fun BookDetailScreen(
                                             showMenu = false
                                         }
                                     )
-                                    DropdownMenuItem(
-                                        text = { Text("Refresh Metadata", color = Color.White) }, 
-                                        onClick = {
-                                            viewModel.refreshMetadata(mediaId)
-                                            showMenu = false
-                                        }
-                                    )
                                 }
                             }
                         }

@@ -47,7 +47,7 @@ pub async fn get_continue_watching(State(pool): State<SqlitePool>) -> Result<Jso
          JOIN playback_progress p ON m.id = p.media_id
          JOIN libraries l ON m.library_id = l.id
          WHERE p.position > 10 AND p.position < (p.total_duration * 0.95)
-         AND l.library_type != 'other'
+         AND l.library_type NOT IN ('other', 'books')
          ORDER BY p.last_watched DESC
          LIMIT 10"
     )
@@ -415,7 +415,7 @@ pub async fn get_thumbnail(
                         .filter(|name| {
                             let lower = name.to_lowercase();
                             lower.ends_with(".jpg") || lower.ends_with(".jpeg") || 
-                            lower.ends_with(".png") || lower.ends_with(".webp")
+                            lower.ends_with(".png") || lower.ends_with(".webp") || lower.ends_with(".gif")
                         })
                         .map(|s| s.to_string())
                         .collect();

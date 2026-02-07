@@ -28,6 +28,8 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.VerticalPager
 import androidx.compose.foundation.pager.rememberPagerState
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
 
 @Composable
 fun BookReaderScreen(
@@ -86,96 +88,144 @@ fun BookReaderScreen(
         if (uiState.isLoading) {
              CircularProgressIndicator(modifier = Modifier.align(Alignment.Center), color = Color.White)
         } else if (uiState.pages.isNotEmpty()) {
-            val pagerState = rememberPagerState(pageCount = { uiState.pages.size })
-            
-            // Sync Logic
-            LaunchedEffect(pagerState, viewModel) {
-                snapshotFlow { pagerState.currentPage }.collect { page ->
-                    viewModel.setPage(page)
-                }
-            }
-            
-            LaunchedEffect(uiState.currentPageIndex) {
-                 if (pagerState.currentPage != uiState.currentPageIndex) {
-                     pagerState.scrollToPage(uiState.currentPageIndex)
-                 }
-            }
-            
-            // Auto-next: detect when on last page and user tries to go further or is on last page
-            LaunchedEffect(pagerState) {
-                snapshotFlow { pagerState.settledPage }.collect { page ->
-                    if (page == uiState.pages.size - 1 && 
-                        playlist.isNotEmpty() && 
-                        currentIndex < playlist.size - 1) {
-                        // Mark that we're on satisfy conditions for next chapter
-                         // For now this is handled by button or tap, but we could auto-trigger if desired
-                         // keeping implementation simple: just update page so viewModel knows isOnLastPage
-                    }
-                }
-            }
-
-            if (uiState.readingMode == ReadingMode.Horizontal) {
-                // Reverse direction for manga? User setting needed. defaulting to LTR for now.
-                HorizontalPager(
-                    state = pagerState,
-                    modifier = Modifier.fillMaxSize()
-                ) { page ->
-                    val pageData = uiState.pages[page]
-                    ReaderPage(
-                        serverUrl = uiState.serverUrl,
-                        mediaId = mediaId,
-                        pageIndex = pageData.index
-                    )
-                }
-            } else if (uiState.readingMode == ReadingMode.Vertical) {
-                 VerticalPager(
-                    state = pagerState,
-                    modifier = Modifier.fillMaxSize()
-                ) { page ->
-                    val pageData = uiState.pages[page]
-                    ReaderPage(
-                        serverUrl = uiState.serverUrl,
-                        mediaId = mediaId,
-                        pageIndex = pageData.index
-                    )
-                }
-            } else if (uiState.readingMode == ReadingMode.Webtoon) {
-                // Continuous Vertical Scroll
-                val listState = rememberLazyListState()
+            // Key to force recreation when mode changes between pager modes
+            // Key to force recreation when mode changes between pager modes
+            key(uiState.readingMode) {
+                val hasNextChapter = playlist.isNotEmpty() && currentIndex < playlist.size - 1
                 
-                // Sync scroll position with page number
-                LaunchedEffect(listState) {
-                    snapshotFlow { listState.firstVisibleItemIndex }.collect { index ->
-                        viewModel.setPage(index)
-                    }
-                }
-
-                // Sync ViewModel page change to scroll position (initial load or slider)
-                LaunchedEffect(uiState.currentPageIndex) {
-                    if (listState.firstVisibleItemIndex != uiState.currentPageIndex) {
-                         // Only scroll if difference is significant to avoid jitter during scroll
-                         if (Math.abs(listState.firstVisibleItemIndex - uiState.currentPageIndex) > 1) {
-                             listState.scrollToItem(uiState.currentPageIndex)
-                         }
-                    }
-                }
-                
-                LazyColumn(
-                    state = listState,
-                    modifier = Modifier.fillMaxSize()
-                ) {
-                    items(uiState.pages) { pageData ->
-                        ReaderPage(
-                            serverUrl = uiState.serverUrl,
-                            mediaId = mediaId,
-                            pageIndex = pageData.index,
-                            fitScreen = false // Webtoons are usually long strips or fit width
-                        )
+                if (uiState.readingMode == ReadingMode.Horizontal || uiState.readingMode == ReadingMode.Vertical) {
+                    val pagerPageCount = uiState.pages.size + (if (hasNextChapter) 1 else 0)
+                    val pagerState = rememberPagerState(pageCount = { pagerPageCount })
+                    
+                    // Sync Logic for pager modes
+                    LaunchedEffect(pagerState, viewModel) {
+                        snapshotFlow { pagerState.currentPage }.collect { page ->
+                            if (page < uiState.pages.size) {
+                                viewModel.setPage(page)
+                            }
+                        }
                     }
                     
-                    // Add extensive padding at bottom to allow scrolling past last item for next chapter button visibility
-                    item {
-                        Spacer(modifier = Modifier.height(100.dp))
+                    LaunchedEffect(uiState.currentPageIndex) {
+                         if (pagerState.currentPage != uiState.currentPageIndex && uiState.currentPageIndex < uiState.pages.size) {
+                             pagerState.scrollToPage(uiState.currentPageIndex)
+                         }
+                    }
+                    
+                    if (uiState.readingMode == ReadingMode.Horizontal) {
+                        HorizontalPager(
+                            state = pagerState,
+                            modifier = Modifier.fillMaxSize()
+                        ) { page ->
+                            if (page < uiState.pages.size) {
+                                val pageData = uiState.pages[page]
+                                ReaderPage(
+                                    serverUrl = uiState.serverUrl,
+                                    mediaId = mediaId,
+                                    pageIndex = pageData.index
+                                )
+                            } else {
+                                // Next Chapter page - user must tap to proceed
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .clickable {
+                                            val nextMediaId = playlist[currentIndex + 1]
+                                            onNext?.invoke(nextMediaId)
+                                        },
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text("Tap for Next Chapter", color = Color.White, style = MaterialTheme.typography.titleLarge)
+                                }
+                            }
+                        }
+                    } else {
+                        // Vertical mode
+                        VerticalPager(
+                            state = pagerState,
+                            modifier = Modifier.fillMaxSize()
+                        ) { page ->
+                            if (page < uiState.pages.size) {
+                                val pageData = uiState.pages[page]
+                                ReaderPage(
+                                    serverUrl = uiState.serverUrl,
+                                    mediaId = mediaId,
+                                    pageIndex = pageData.index
+                                )
+                            } else {
+                                // Next Chapter page - user must tap to proceed
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .clickable {
+                                            val nextMediaId = playlist[currentIndex + 1]
+                                            onNext?.invoke(nextMediaId)
+                                        },
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text("Tap for Next Chapter", color = Color.White, style = MaterialTheme.typography.titleLarge)
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    // Webtoon mode - Continuous Vertical Scroll
+                    val listState = rememberLazyListState()
+                    
+                    // Sync scroll position with page number
+                    LaunchedEffect(listState) {
+                        snapshotFlow { listState.firstVisibleItemIndex }.collect { index ->
+                            if (index < uiState.pages.size) {
+                                viewModel.setPage(index)
+                            }
+                        }
+                    }
+
+                    // Sync ViewModel page change to scroll position (initial load or slider)
+                    LaunchedEffect(uiState.currentPageIndex) {
+                        if (listState.firstVisibleItemIndex != uiState.currentPageIndex) {
+                             // Only scroll if difference is significant to avoid jitter during scroll
+                             if (Math.abs(listState.firstVisibleItemIndex - uiState.currentPageIndex) > 1) {
+                                 // Check bounds
+                                 if (uiState.currentPageIndex < uiState.pages.size) {
+                                     listState.scrollToItem(uiState.currentPageIndex)
+                                 }
+                             }
+                        }
+                    }
+                    
+                    LazyColumn(
+                        state = listState,
+                        modifier = Modifier.fillMaxSize()
+                    ) {
+                        items(uiState.pages) { pageData ->
+                            ReaderPage(
+                                serverUrl = uiState.serverUrl,
+                                mediaId = mediaId,
+                                pageIndex = pageData.index,
+                                fitScreen = false // Webtoons are usually long strips or fit width
+                            )
+                        }
+                        
+                        // Bottom item: Next Chapter button or spacer
+                        item {
+                            if (hasNextChapter) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(150.dp)
+                                        .clickable {
+                                            val nextMediaId = playlist[currentIndex + 1]
+                                            onNext?.invoke(nextMediaId)
+                                        },
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text("Tap for Next Chapter", color = Color.White, style = MaterialTheme.typography.titleMedium)
+                                }
+                            } else {
+                                Spacer(modifier = Modifier.height(100.dp))
+                            }
+                        }
                     }
                 }
             }

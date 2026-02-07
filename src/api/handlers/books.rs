@@ -95,5 +95,5 @@ pub async fn get_book_page(
 
 fn is_image(filename: &str) -> bool {
     let lower = filename.to_lowercase();
-    lower.ends_with(".jpg") || lower.ends_with(".jpeg") || lower.ends_with(".png") || lower.ends_with(".webp")
+    lower.ends_with(".jpg") || lower.ends_with(".jpeg") || lower.ends_with(".png") || lower.ends_with(".webp") || lower.ends_with(".gif")
 }

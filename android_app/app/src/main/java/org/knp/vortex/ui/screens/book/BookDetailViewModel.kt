@@ -38,6 +38,8 @@ class BookDetailViewModel @Inject constructor(
     }
 
     fun loadMedia(id: Long) {
+        if (_uiState.value.media?.id == id) return
+
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true)
             repository.getMediaDetails(id)

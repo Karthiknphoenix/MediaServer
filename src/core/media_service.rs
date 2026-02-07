@@ -51,7 +51,7 @@ pub async fn update_series_metadata(
         .unwrap_or(0);
     
     sqlx::query(
-        "UPDATE media SET poster_url = ?, backdrop_url = ?, plot = ?, year = ?, genres = ?, provider_ids = ? WHERE series_name = ?"
+        "UPDATE media SET poster_url = ?, backdrop_url = ?, plot = ?, year = ?, genres = ?, provider_ids = ? WHERE series_name = ? AND media_type != 'book'"
     )
     .bind(&meta.poster_url)
     .bind(&meta.backdrop_url)
@@ -77,7 +77,7 @@ pub async fn update_episode_details(
     still_url: Option<String>,
 ) -> Result<(), AppError> {
     sqlx::query(
-        "UPDATE media SET title = ?, plot = ?, still_url = ? WHERE series_name = ? AND season_number = ? AND episode_number = ?"
+        "UPDATE media SET title = ?, plot = ?, still_url = ? WHERE series_name = ? AND season_number = ? AND episode_number = ? AND media_type != 'book'"
     )
     .bind(title)
     .bind(plot)
@@ -94,7 +94,7 @@ pub async fn update_episode_details(
 /// Get all distinct season numbers for a series.
 pub async fn get_series_seasons(pool: &SqlitePool, series_name: &str) -> Result<Vec<i32>, AppError> {
     let seasons: Vec<i32> = sqlx::query_scalar(
-        "SELECT DISTINCT season_number FROM media WHERE series_name = ? AND season_number IS NOT NULL"
+        "SELECT DISTINCT season_number FROM media WHERE series_name = ? AND season_number IS NOT NULL AND media_type != 'book'"
     )
     .bind(series_name)
     .fetch_all(pool)

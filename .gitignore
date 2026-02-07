@@ -33,7 +33,14 @@ src/check_db.rs
 .gemini/
 .agent/
 
+static/*
+src/bin/*
+folder/*
+manhwa18/*
+
 /thumbnails
 vortex_server.db
 vortex_server.db-shm
 vortex_server.db-wal
+static/thumbnails/comic_series_Between_Us.jpg
+vortex_server.db

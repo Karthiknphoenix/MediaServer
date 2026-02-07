@@ -31,7 +31,11 @@ pub async fn get_recently_added(State(pool): State<SqlitePool>) -> Result<Json<V
                 (SELECT poster_url FROM media m2 WHERE m2.series_name = media.series_name AND m2.poster_url IS NOT NULL LIMIT 1)
              ELSE media.poster_url END) as poster_url,
             media.plot,
-            (CASE WHEN media.series_name IS NOT NULL THEN 'series' ELSE 'movie' END) as media_type,
+            (CASE WHEN media.series_name IS NOT NULL THEN 
+                (CASE WHEN l.library_type = 'books' THEN 'comic_series' ELSE 'series' END)
+             ELSE 
+                (CASE WHEN l.library_type = 'books' THEN 'book' ELSE 'movie' END)
+             END) as media_type,
             MAX(media.added_at) as added_at,
             media.series_name,
             NULL as season_number,

@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -24,6 +25,7 @@ data class HomeUiState(
     val visibleLibraries: List<LibraryDto> = emptyList(), // Filtered libraries for display
     val libraryContent: Map<Long, List<MediaItemDto>> = emptyMap(),
     val tvShowLibraryContent: Map<Long, List<SeriesDto>> = emptyMap(),
+    val comicSeriesLibraryContent: Map<Long, List<org.knp.vortex.data.remote.ComicSeriesDto>> = emptyMap(),
     val allSeries: List<SeriesDto> = emptyList(),
     val isLoading: Boolean = false,
     val isRefreshing: Boolean = false,
@@ -75,26 +77,60 @@ class HomeViewModel @Inject constructor(
                 _uiState.value = _uiState.value.copy(isLoading = true)
             }
             
-            val recentResult = repository.getRecentlyAdded()
-            val librariesResult = repository.getLibraries()
-            val continueResult = repository.getContinueWatching()
-            val seriesResult = repository.getSeries()
+            // Execute all initial API calls in PARALLEL using async
+            val recentDeferred = async { repository.getRecentlyAdded() }
+            val librariesDeferred = async { repository.getLibraries() }
+            val continueDeferred = async { repository.getContinueWatching() }
+            val seriesDeferred = async { repository.getSeries() }
+            val comicSeriesDeferred = async { repository.getComicSeries() }
+            
+            // Await all results concurrently
+            val recentResult = recentDeferred.await()
+            val librariesResult = librariesDeferred.await()
+            val continueResult = continueDeferred.await()
+            val seriesResult = seriesDeferred.await()
+            val comicSeriesResult = comicSeriesDeferred.await()
             
             val libraries = librariesResult.getOrDefault(emptyList())
             val allSeries = seriesResult.getOrDefault(emptyList())
+            val allComicSeries = comicSeriesResult.getOrDefault(emptyList())
             
-            // Fetch content for each library (max 10 items each)
+            // Fetch content for each library in PARALLEL
             val libraryContent = mutableMapOf<Long, List<MediaItemDto>>()
             val tvShowLibraryContent = mutableMapOf<Long, List<SeriesDto>>()
+            val comicSeriesLibraryContent = mutableMapOf<Long, List<org.knp.vortex.data.remote.ComicSeriesDto>>()
             
+            // Identify which libraries need media fetching and create parallel jobs
+            val libraryMediaJobs = libraries
+                .filter { lib -> 
+                    lib.library_type != "tv_shows" && 
+                    !(lib.library_type == "books" && allComicSeries.isNotEmpty())
+                }
+                .map { lib ->
+                    async {
+                        lib.id to repository.getLibraryMedia(lib.id)
+                    }
+                }
+            
+            // Await all library media fetches in parallel
+            libraryMediaJobs.forEach { job ->
+                val (libId, result) = job.await()
+                result.onSuccess { media ->
+                    libraryContent[libId] = media.take(10)
+                }
+            }
+            
+            // Handle TV shows and books (non-network operations)
             libraries.forEach { lib ->
-                if (lib.library_type == "tv_shows") {
-                    // For TV Shows, use series data
-                    tvShowLibraryContent[lib.id] = allSeries.take(10)
-                } else {
-                    // For Movies and other types, use library media
-                    repository.getLibraryMedia(lib.id).onSuccess { media ->
-                        libraryContent[lib.id] = media.take(10)
+                when (lib.library_type) {
+                    "tv_shows" -> {
+                        tvShowLibraryContent[lib.id] = allSeries.take(10)
+                    }
+                    "books" -> {
+                        if (allComicSeries.isNotEmpty()) {
+                            comicSeriesLibraryContent[lib.id] = allComicSeries.take(10)
+                        }
+                        // If no comic series, libraryContent was already fetched in parallel above
                     }
                 }
             }
@@ -104,6 +140,7 @@ class HomeViewModel @Inject constructor(
                 libraries = libraries,
                 libraryContent = libraryContent,
                 tvShowLibraryContent = tvShowLibraryContent,
+                comicSeriesLibraryContent = comicSeriesLibraryContent,
                 continueWatching = continueResult.getOrDefault(emptyList()),
                 allSeries = allSeries,
                 isLoading = false,

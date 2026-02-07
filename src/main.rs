@@ -24,6 +24,26 @@ async fn main() {
     // Migration: Add backdrop_url column if not exists
     let _ = sqlx::query("ALTER TABLE media ADD COLUMN backdrop_url TEXT").execute(&pool).await;
     
+    // Migration: Create reading_lists table
+    let _ = sqlx::query(
+        "CREATE TABLE IF NOT EXISTS reading_lists (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL
+        )"
+    ).execute(&pool).await;
+    
+    // Migration: Create reading_list_items table
+    let _ = sqlx::query(
+        "CREATE TABLE IF NOT EXISTS reading_list_items (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            list_id INTEGER NOT NULL,
+            media_id INTEGER NOT NULL,
+            position INTEGER NOT NULL DEFAULT 0,
+            FOREIGN KEY (list_id) REFERENCES reading_lists(id),
+            FOREIGN KEY (media_id) REFERENCES media(id)
+        )"
+    ).execute(&pool).await;
+    
     // Background scan removed to prevent load on startup
     // Scan is now triggered manually via API or on library creation
 

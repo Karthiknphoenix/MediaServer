@@ -101,7 +101,7 @@ fun CreateLibraryScreen(
                             .horizontalScroll(rememberScrollState()),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        listOf("movies", "tv_shows", "music_videos", "other").forEach { type ->
+                        listOf("movies", "tv_shows", "music_videos", "books", "other").forEach { type ->
                             val isSelected = uiState.type == type
                             FilterChip(
                                 selected = isSelected,

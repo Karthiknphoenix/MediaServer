@@ -19,10 +19,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import org.knp.vortex.data.remote.FileSystemEntryDto
+import org.knp.vortex.data.remote.ComicSeriesDto
 import androidx.activity.compose.BackHandler
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Book
 import androidx.compose.ui.graphics.asImageBitmap
 import kotlinx.coroutines.launch
 import coil.compose.AsyncImage
@@ -30,6 +32,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.graphics.Brush
 import org.knp.vortex.data.remote.MediaItemDto
 import org.knp.vortex.data.remote.SeriesDto
+import org.knp.vortex.data.remote.ReadingListDto
 import org.knp.vortex.data.repository.MediaRepository
 import org.knp.vortex.ui.components.AppHeader
 import org.knp.vortex.ui.components.ModernMediaCard
@@ -46,6 +49,8 @@ data class LibraryUiState(
     val isLoading: Boolean = true,
     val mediaItems: List<MediaItemDto> = emptyList(),
     val seriesList: List<SeriesDto> = emptyList(),
+    val comicSeriesList: List<ComicSeriesDto> = emptyList(),
+    val readingLists: List<ReadingListDto> = emptyList(),
     val fileSystemEntries: List<FileSystemEntryDto> = emptyList(),
     val currentPath: String = "",
     val error: String? = null,
@@ -75,6 +80,13 @@ class LibraryViewModel @Inject constructor(
                 type == "tv_shows" -> {
                     repository.getSeries().onSuccess { allSeries ->
                         uiState = uiState.copy(isLoading = false, seriesList = allSeries)
+                    }.onFailure { error -> uiState = uiState.copy(isLoading = false, error = error.message) }
+                }
+                type == "books" -> {
+                    repository.getComicSeries().onSuccess { allSeries ->
+                        uiState = uiState.copy(isLoading = false, comicSeriesList = allSeries)
+                        // Also load reading lists
+                        loadReadingLists()
                     }.onFailure { error -> uiState = uiState.copy(isLoading = false, error = error.message) }
                 }
                 type == "other" || type == "music_videos" -> {
@@ -113,6 +125,15 @@ class LibraryViewModel @Inject constructor(
         val newPath = if (parts.size <= 1) "" else parts.dropLast(1).joinToString("/")
         browse(libId, newPath)
     }
+    
+    private fun loadReadingLists() {
+        viewModelScope.launch {
+            repository.getReadingLists()
+                .onSuccess { lists ->
+                    uiState = uiState.copy(readingLists = lists)
+                }
+        }
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -123,6 +144,8 @@ fun LibraryScreen(
     libraryType: String,
     onPlayMedia: (Long, String?) -> Unit,
     onOpenSeries: (String) -> Unit,
+    onOpenComicSeries: (String) -> Unit = {},
+    onOpenReadingList: (Long) -> Unit = {},
     onBack: () -> Unit,
     viewModel: LibraryViewModel = hiltViewModel()
 ) {
@@ -193,9 +216,71 @@ fun LibraryScreen(
                             items(uiState.seriesList) { series ->
                                 ModernMediaCard(
                                     title = series.name,
-                                    posterUrl = series.poster_url,
+                                    posterUrl = series.poster_url?.let { url ->
+                                        if (url.startsWith("/")) "${uiState.serverUrl.trimEnd('/')}$url" else url
+                                    },
                                     year = null,
                                     onClick = { onOpenSeries(series.name) },
+                                    modifier = Modifier.width(140.dp)
+                                )
+                            }
+
+                        } else if (libraryType == "books") {
+                            // Reading Lists Section
+                            if (uiState.readingLists.isNotEmpty()) {
+                                item(span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }) {
+                                    Column(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
+                                        Text(
+                                            text = "Reading Lists",
+                                            style = MaterialTheme.typography.titleMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color.White,
+                                            modifier = Modifier.padding(bottom = 12.dp)
+                                        )
+                                        uiState.readingLists.forEach { list ->
+                                            org.knp.vortex.ui.components.GlassyCard(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(vertical = 4.dp),
+                                                shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp),
+                                                onClick = { onOpenReadingList(list.id) }
+                                            ) {
+                                                Row(
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .padding(16.dp),
+                                                    verticalAlignment = Alignment.CenterVertically
+                                                ) {
+                                                    Text(
+                                                        text = list.name,
+                                                        style = MaterialTheme.typography.bodyLarge,
+                                                        color = Color.White,
+                                                        modifier = Modifier.weight(1f)
+                                                    )
+                                                }
+                                            }
+                                        }
+                                        Spacer(modifier = Modifier.height(16.dp))
+                                        Text(
+                                            text = "Books",
+                                            style = MaterialTheme.typography.titleMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color.White,
+                                            modifier = Modifier.padding(bottom = 8.dp)
+                                        )
+                                    }
+                                }
+                            }
+                            
+                            // Comic Series items
+                            items(uiState.comicSeriesList) { series ->
+                                ModernMediaCard(
+                                    title = series.name,
+                                    posterUrl = series.poster_url?.let { url ->
+                                        if (url.startsWith("/")) "${uiState.serverUrl.trimEnd('/')}$url" else url
+                                    },
+                                    year = series.year,
+                                    onClick = { onOpenComicSeries(series.name) },
                                     modifier = Modifier.width(140.dp)
                                 )
                             }
@@ -209,10 +294,23 @@ fun LibraryScreen(
                                         .aspectRatio(1f), // Square for folders/files
                                     onClick = { 
                                         if (entry.is_directory) {
-                                            viewModel.browse(libraryId, entry.path)
+                                            // For books library, folders are comic series
+                                            if (libraryType.lowercase() == "books") {
+                                                onOpenComicSeries(entry.name)
+                                            } else {
+                                                viewModel.browse(libraryId, entry.path)
+                                            }
                                         } else {
                                             if (entry.media_id != null) {
-                                                onPlayMedia(entry.media_id, libraryType)
+                                                // Smart detection for books in "Other" libraries
+                                                val isBook = entry.name.lowercase().let { 
+                                                    it.endsWith(".cbz") || it.endsWith(".cbr") || 
+                                                    it.endsWith(".epub") || it.endsWith(".pdf") ||
+                                                    (it.endsWith(".zip") && libraryType == "books")
+                                                }
+                                                
+                                                val targetType = if (isBook) "books" else libraryType
+                                                onPlayMedia(entry.media_id, targetType)
                                             } else {
                                                 android.widget.Toast.makeText(context, "Processing media, please wait...", android.widget.Toast.LENGTH_SHORT).show()
                                             }
@@ -226,8 +324,9 @@ fun LibraryScreen(
                                             if (entry.poster_url == null && entry.media_id == null) return@remember null
                                             
                                             // Use poster_url if available, otherwise use server thumbnail endpoint
-                                            val imageUrl = entry.poster_url 
-                                                ?: "${uiState.serverUrl.trimEnd('/')}/api/v1/media/${entry.media_id}/thumbnail"
+                                            val imageUrl = entry.poster_url?.let { url ->
+                                                if (url.startsWith("/")) "${uiState.serverUrl.trimEnd('/')}$url" else url
+                                            } ?: "${uiState.serverUrl.trimEnd('/')}/api/v1/media/${entry.media_id}/thumbnail"
                                             
                                             coil.request.ImageRequest.Builder(context)
                                                 .data(imageUrl)
@@ -272,8 +371,21 @@ fun LibraryScreen(
                                                 horizontalAlignment = Alignment.CenterHorizontally,
                                                 verticalArrangement = Arrangement.Center
                                             ) {
+                                                val isBook = entry.name.lowercase().let { 
+                                                    it.endsWith(".cbz") || it.endsWith(".cbr") || 
+                                                    it.endsWith(".epub") || it.endsWith(".pdf") ||
+                                                    (it.endsWith(".zip") && libraryType == "books")
+                                                }
+                                                val icon = if (entry.is_directory) {
+                                                    androidx.compose.material.icons.Icons.Filled.Folder
+                                                } else if (libraryType == "books" || isBook) {
+                                                    androidx.compose.material.icons.Icons.Filled.Book
+                                                } else {
+                                                    androidx.compose.material.icons.Icons.Filled.PlayArrow
+                                                }
+                                                
                                                 Icon(
-                                                    imageVector = if (entry.is_directory) androidx.compose.material.icons.Icons.Filled.Folder else androidx.compose.material.icons.Icons.Filled.PlayArrow,
+                                                    imageVector = icon,
                                                     contentDescription = null,
                                                     tint = if (entry.is_directory) Color(0xFFFFC107) else Color.White,
                                                     modifier = Modifier.size(48.dp)

@@ -320,6 +320,12 @@ pub async fn get_thumbnail(
             None => return Err(AppError::NotFound("Media not found".to_string())),
         };
 
+        // Check if this is a book file - skip FFmpeg for books
+        let is_book = file_path.to_lowercase().ends_with(".cbz") 
+            || file_path.to_lowercase().ends_with(".cbr")
+            || file_path.to_lowercase().ends_with(".epub")
+            || file_path.to_lowercase().ends_with(".pdf");
+
         // 3. Try validation/download from metadata
         let mut generated = false;
 
@@ -350,8 +356,8 @@ pub async fn get_thumbnail(
             }
         }
 
-        // 4. Fallback to FFmpeg if needed
-        if !generated {
+        // 4. Fallback to FFmpeg if needed (skip for books)
+        if !generated && !is_book {
              // Find FFmpeg - check common locations first
             let ffmpeg_paths = [
                 "C:\\ffmpeg\\bin\\ffmpeg.exe",  // Common Windows install
@@ -393,6 +399,40 @@ pub async fn get_thumbnail(
                 Err(e) => {
                      tracing::error!("Failed to execute FFmpeg: {}", e);
                 }
+            }
+        } else if !generated && is_book {
+            // For books, try to extract cover from CBZ/ZIP
+            if file_path.to_lowercase().ends_with(".cbz") || file_path.to_lowercase().ends_with(".zip") {
+                let file_path_clone = file_path.clone();
+                let thumb_path_clone = thumb_path.clone();
+                
+                // Use spawn_blocking since zip::ZipArchive is not Send
+                let _ = tokio::task::spawn_blocking(move || -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+                    let file = std::fs::File::open(&file_path_clone)?;
+                    let mut archive = zip::ZipArchive::new(file)?;
+                    
+                    let mut image_names: Vec<String> = archive.file_names()
+                        .filter(|name| {
+                            let lower = name.to_lowercase();
+                            lower.ends_with(".jpg") || lower.ends_with(".jpeg") || 
+                            lower.ends_with(".png") || lower.ends_with(".webp")
+                        })
+                        .map(|s| s.to_string())
+                        .collect();
+                    
+                    image_names.sort();
+                    
+                    if let Some(first_image) = image_names.first() {
+                        let mut file = archive.by_name(first_image)?;
+                        use std::io::Read;
+                        let mut buffer = Vec::new();
+                        file.read_to_end(&mut buffer)?;
+                        std::fs::write(&thumb_path_clone, &buffer)?;
+                    }
+                    Ok(())
+                }).await;
+                
+                tracing::info!("Extracted cover from CBZ for {}", id);
             }
         }
     }

@@ -4,6 +4,7 @@ import androidx.compose.ui.graphics.Color
 
 // Modern Sleek Palette
 val DeepBackground = Color(0xFF0F1119)
+val BlackBackground = Color(0xFF000000)
 val SurfaceColor = Color(0xFF1F222E)
 val PrimaryBlue = Color(0xFF4D72F5)
 val CyanAccent = Color(0xFF00D7FF)

@@ -12,10 +12,10 @@ use crate::models::tv::{SeriesDto, SeasonDto, EpisodeDto, SeriesDetailDto};
 pub async fn get_all_series(State(pool): State<SqlitePool>) -> Result<Json<Vec<SeriesDto>>, AppError> {
     let series_rows: Vec<(String, i32, Option<String>)> = sqlx::query_as(
         "SELECT media.series_name, COUNT(DISTINCT media.season_number) as season_count, 
-                (SELECT poster_url FROM media m2 WHERE m2.series_name = media.series_name AND m2.poster_url IS NOT NULL LIMIT 1)
+                (SELECT poster_url FROM media m2 JOIN libraries l2 ON m2.library_id = l2.id WHERE m2.series_name = media.series_name AND m2.poster_url IS NOT NULL AND l2.library_type = 'tv_shows' LIMIT 1)
          FROM media 
          JOIN libraries l ON media.library_id = l.id
-         WHERE media.series_name IS NOT NULL 
+         WHERE media.series_name IS NOT NULL AND l.library_type = 'tv_shows'
          GROUP BY media.series_name 
          ORDER BY media.series_name ASC"
     )
@@ -44,9 +44,10 @@ pub async fn get_series_seasons(
 
     let season_rows: Vec<(i32, i32, Option<String>)> = sqlx::query_as(
         "SELECT season_number, COUNT(*) as episode_count,
-                (SELECT poster_url FROM media m2 WHERE m2.series_name = ? AND m2.season_number = media.season_number AND m2.poster_url IS NOT NULL LIMIT 1)
+                (SELECT poster_url FROM media m2 JOIN libraries l2 ON m2.library_id = l2.id WHERE m2.series_name = ? AND m2.season_number = media.season_number AND m2.poster_url IS NOT NULL AND l2.library_type = 'tv_shows' LIMIT 1)
          FROM media 
-         WHERE series_name = ? AND season_number IS NOT NULL
+         JOIN libraries l ON media.library_id = l.id
+         WHERE series_name = ? AND season_number IS NOT NULL AND l.library_type = 'tv_shows'
          GROUP BY season_number 
          ORDER BY season_number ASC"
     )
@@ -76,10 +77,11 @@ pub async fn get_season_episodes(
         .into_owned();
 
     let episode_rows: Vec<(i64, Option<String>, Option<i32>, Option<String>, String, Option<String>)> = sqlx::query_as(
-        "SELECT id, title, episode_number, still_url, file_path, plot 
+        "SELECT media.id, media.title, media.episode_number, media.still_url, media.file_path, media.plot 
         FROM media 
-        WHERE series_name = ? AND season_number = ?
-        ORDER BY episode_number ASC"
+        JOIN libraries l ON media.library_id = l.id
+        WHERE media.series_name = ? AND media.season_number = ? AND l.library_type = 'tv_shows'
+        ORDER BY media.episode_number ASC"
     )
     .bind(&series_name)
     .bind(season_number)
@@ -113,7 +115,11 @@ pub async fn get_series_detail(
     tracing::info!("Fetching details for series: '{}'", series_name);
 
     let series_info: Option<(Option<String>, Option<String>, Option<String>, Option<i64>, Option<String>)> = sqlx::query_as(
-        "SELECT poster_url, backdrop_url, plot, year, genres FROM media WHERE series_name = ? AND poster_url IS NOT NULL LIMIT 1"
+        "SELECT media.poster_url, media.backdrop_url, media.plot, media.year, media.genres 
+         FROM media 
+         JOIN libraries l ON media.library_id = l.id
+         WHERE media.series_name = ? AND media.poster_url IS NOT NULL AND l.library_type = 'tv_shows' 
+         LIMIT 1"
     )
     .bind(&series_name)
     .fetch_optional(&pool)
@@ -121,9 +127,10 @@ pub async fn get_series_detail(
 
     let season_rows: Vec<(i32, i32, Option<String>)> = sqlx::query_as(
         "SELECT season_number, COUNT(*) as episode_count,
-                (SELECT poster_url FROM media m2 WHERE m2.series_name = ? AND m2.season_number = media.season_number AND m2.poster_url IS NOT NULL LIMIT 1)
+                (SELECT poster_url FROM media m2 JOIN libraries l2 ON m2.library_id = l2.id WHERE m2.series_name = ? AND m2.season_number = media.season_number AND m2.poster_url IS NOT NULL AND l2.library_type = 'tv_shows' LIMIT 1)
          FROM media 
-         WHERE series_name = ? AND season_number IS NOT NULL
+         JOIN libraries l ON media.library_id = l.id
+         WHERE series_name = ? AND season_number IS NOT NULL AND l.library_type = 'tv_shows'
          GROUP BY season_number 
          ORDER BY season_number ASC"
     )

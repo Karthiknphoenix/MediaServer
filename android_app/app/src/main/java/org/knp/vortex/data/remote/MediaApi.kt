@@ -87,7 +87,84 @@ interface MediaApi {
 
     @GET("$API_VERSION/stream/{id}/subtitles")
     suspend fun getSubtitles(@Path("id") id: Long): List<SubtitleTrackDto>
+
+    @GET("$API_VERSION/media/{id}/pages")
+    suspend fun getBookPages(@Path("id") id: Long): List<BookPageDto>
+
+    // Comic series endpoints
+    @GET("$API_VERSION/comic/series")
+    suspend fun getComicSeries(): List<ComicSeriesDto>
+
+    @GET("$API_VERSION/comic/series/{name}")
+    suspend fun getComicSeriesDetail(@Path("name") name: String): ComicSeriesDetailDto
+
+    @androidx.annotation.CheckResult
+    @retrofit2.http.GET("$API_VERSION/comic/series/{name}/chapters")
+    suspend fun getComicChapters(@Path("name") name: String): List<ComicChapterDto>
+
+    @retrofit2.http.Multipart
+    @POST("$API_VERSION/comic/series/{name}/metadata")
+    suspend fun updateComicSeriesMetadata(
+        @Path("name") name: String,
+        @retrofit2.http.Part("plot") plot: okhttp3.RequestBody?,
+        @retrofit2.http.Part("year") year: okhttp3.RequestBody?,
+        @retrofit2.http.Part("genres") genres: okhttp3.RequestBody?,
+        @retrofit2.http.Part poster: okhttp3.MultipartBody.Part?
+    )
+
+    // Reading List endpoints
+    @GET("$API_VERSION/reading_lists")
+    suspend fun getReadingLists(): List<ReadingListDto>
+
+    @POST("$API_VERSION/reading_lists")
+    suspend fun createReadingList(@Body request: CreateReadingListRequest): ReadingListDto
+
+    @GET("$API_VERSION/reading_lists/{id}")
+    suspend fun getReadingListDetails(@Path("id") id: Long): ReadingListWithItemsDto
+
+    @POST("$API_VERSION/reading_lists/{id}/items")
+    suspend fun addItemsToReadingList(@Path("id") id: Long, @Body request: AddItemsToListRequest)
+
+    @retrofit2.http.DELETE("$API_VERSION/reading_lists/{id}")
+    suspend fun deleteReadingList(@Path("id") id: Long)
 }
+
+// Comic DTOs
+data class ComicSeriesDto(
+    val name: String,
+    val chapter_count: Long,
+    val poster_url: String?,
+    val backdrop_url: String?,
+    val plot: String?,
+    val year: Long?,
+    val genres: String?
+)
+
+data class ComicChapterDto(
+    val id: Long,
+    val title: String,
+    val chapter_number: Int?,
+    val poster_url: String?,
+    val file_path: String,
+    val plot: String?,
+    val year: Long?
+)
+
+data class ComicSeriesDetailDto(
+    val name: String,
+    val chapter_count: Int,
+    val poster_url: String?,
+    val backdrop_url: String?,
+    val plot: String?,
+    val year: Long?,
+    val genres: String?,
+    val chapters: List<ComicChapterDto>
+)
+
+data class BookPageDto(
+    val index: Int,
+    val filename: String
+)
 
 data class SubtitleTrackDto(
     val id: String,
@@ -202,4 +279,41 @@ data class SeriesDetailDto(
     val year: Long?,
     val genres: String?,
     val seasons: List<SeasonDto>
+)
+
+data class UpdateSeriesMetadataRequest(
+    val poster_url: String?,
+    val backdrop_url: String?,
+    val plot: String?,
+    val year: Long?,
+    val genres: String?
+)
+
+// Reading List DTOs
+data class ReadingListDto(
+    val id: Long,
+    val name: String
+)
+
+data class CreateReadingListRequest(
+    val name: String
+)
+
+data class AddItemsToListRequest(
+    val media_ids: List<Long>
+)
+
+data class ReadingListItemDto(
+    val id: Long,
+    val list_id: Long,
+    val media_id: Long,
+    val position: Long,
+    val title: String?,
+    val poster_url: String?
+)
+
+data class ReadingListWithItemsDto(
+    val id: Long,
+    val name: String,
+    val items: List<ReadingListItemDto>
 )

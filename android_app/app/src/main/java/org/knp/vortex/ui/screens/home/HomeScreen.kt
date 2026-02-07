@@ -54,6 +54,7 @@ import coil.request.ImageRequest
 fun HomeScreen(
     onPlayMedia: (Long, String?) -> Unit,
     onOpenSeries: (String) -> Unit,
+    onOpenComicSeries: (String) -> Unit,
     onOpenLibrary: (Long, String, String) -> Unit,  // id, name, type
     onOpenSettings: () -> Unit,
     onQuickPlay: (Long) -> Unit, // New callback for direct playback
@@ -233,10 +234,11 @@ fun HomeScreen(
                                         when (item) {
                                             is SeriesDto -> onOpenSeries(item.name)
                                             is MediaItemDto -> {
-                                                if (item.media_type == "series") {
-                                                    onOpenSeries(item.series_name ?: item.title ?: "")
-                                                } else {
-                                                    onPlayMedia(item.id, item.library_type)
+                                                when (item.media_type) {
+                                                    "series" -> onOpenSeries(item.series_name ?: item.title ?: "")
+                                                    "comic_series" -> onOpenComicSeries(item.series_name ?: item.title ?: "")
+                                                    "book" -> onPlayMedia(item.id, "books")
+                                                    else -> onPlayMedia(item.id, item.library_type)
                                                 }
                                             }
                                         }
@@ -262,7 +264,7 @@ fun HomeScreen(
                                                 onQuickPlay(item.id)
                                             },
                                             modifier = Modifier.width(160.dp),
-                                            videoUrl = if (item.poster_url == null) "${uiState.serverUrl}/api/v1/stream/${item.id}" else null
+                                            videoUrl = if (item.poster_url == null && item.library_type != "books") "${uiState.serverUrl}/api/v1/stream/${item.id}" else null
                                         )
                                     }
                                 }
@@ -270,51 +272,106 @@ fun HomeScreen(
                         }
 
                         uiState.visibleLibraries.forEach { library ->
-                            if (library.library_type == "tv_shows") {
-                                val seriesContent = uiState.tvShowLibraryContent[library.id] ?: emptyList()
-                                if (seriesContent.isNotEmpty()) {
-                                    item {
-                                        SectionHeader(
-                                            title = library.name.ifBlank { "TV Shows" },
-                                            onClick = { onOpenLibrary(library.id, library.name, library.library_type) }
-                                        )
-                                        LazyRow(
-                                            contentPadding = PaddingValues(horizontal = 24.dp),
-                                            horizontalArrangement = Arrangement.spacedBy(16.dp)
-                                        ) {
-                                            items(seriesContent) { series ->
-                                                ModernMediaCard(
-                                                    title = series.name,
-                                                    posterUrl = series.poster_url,
-                                                    onClick = { onOpenSeries(series.name) },
-                                                    modifier = Modifier.width(140.dp)
-                                                )
+                            when (library.library_type) {
+                                "tv_shows" -> {
+                                    val seriesContent = uiState.tvShowLibraryContent[library.id] ?: emptyList()
+                                    if (seriesContent.isNotEmpty()) {
+                                        item {
+                                            SectionHeader(
+                                                title = library.name.ifBlank { "TV Shows" },
+                                                onClick = { onOpenLibrary(library.id, library.name, library.library_type) }
+                                            )
+                                            LazyRow(
+                                                contentPadding = PaddingValues(horizontal = 24.dp),
+                                                horizontalArrangement = Arrangement.spacedBy(16.dp)
+                                            ) {
+                                                items(seriesContent) { series ->
+                                                    ModernMediaCard(
+                                                        title = series.name,
+                                                        posterUrl = series.poster_url?.let { url ->
+                                                            if (url.startsWith("/")) "${uiState.serverUrl.trimEnd('/')}$url" else url
+                                                        },
+                                                        onClick = { onOpenSeries(series.name) },
+                                                        modifier = Modifier.width(140.dp)
+                                                    )
+                                                }
                                             }
                                         }
                                     }
                                 }
-                            } else {
-                                val content = uiState.libraryContent[library.id] ?: emptyList()
-                                if (content.isNotEmpty()) {
-                                    item {
-                                        SectionHeader(
-                                            title = library.name.ifBlank {
-                                                library.library_type.replace("_", " ").split(" ").joinToString(" ") { it.replaceFirstChar { c -> c.uppercase() } }
-                                            },
-                                            onClick = { onOpenLibrary(library.id, library.name, library.library_type) }
-                                        )
-                                        LazyRow(
-                                            contentPadding = PaddingValues(horizontal = 24.dp),
-                                            horizontalArrangement = Arrangement.spacedBy(16.dp)
-                                        ) {
-                                            items(content) { item ->
-                                                ModernMediaCard(
-                                                    title = item.title,
-                                                    posterUrl = item.poster_url ?: "${uiState.serverUrl.trimEnd('/')}/api/v1/media/${item.id}/thumbnail",
-                                                    year = item.year,
-                                                    onClick = { onPlayMedia(item.id, library.library_type) },
-                                                    modifier = Modifier.width(140.dp)
-                                                )
+                                "books" -> {
+                                    val comicContent = uiState.comicSeriesLibraryContent[library.id] ?: emptyList()
+                                    val bookContent = uiState.libraryContent[library.id] ?: emptyList()
+                                    
+                                    if (comicContent.isNotEmpty()) {
+                                        // Show grouped Comic Series
+                                        item {
+                                            SectionHeader(
+                                                title = library.name.ifBlank { "Books" },
+                                                onClick = { onOpenLibrary(library.id, library.name, library.library_type) }
+                                            )
+                                            LazyRow(
+                                                contentPadding = PaddingValues(horizontal = 24.dp),
+                                                horizontalArrangement = Arrangement.spacedBy(16.dp)
+                                            ) {
+                                                items(comicContent) { series ->
+                                                    ModernMediaCard(
+                                                        title = series.name,
+                                                        posterUrl = series.poster_url?.let { url ->
+                                                            if (url.startsWith("/")) "${uiState.serverUrl.trimEnd('/')}$url" else url
+                                                        },
+                                                        onClick = { onOpenComicSeries(series.name) },
+                                                        modifier = Modifier.width(140.dp)
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    } else if (bookContent.isNotEmpty()) {
+                                        // Fallback: Show individual books
+                                        item {
+                                            SectionHeader(
+                                                title = library.name.ifBlank { "Books" },
+                                                onClick = { onOpenLibrary(library.id, library.name, library.library_type) }
+                                            )
+                                            LazyRow(
+                                                contentPadding = PaddingValues(horizontal = 24.dp),
+                                                horizontalArrangement = Arrangement.spacedBy(16.dp)
+                                            ) {
+                                                items(bookContent) { item ->
+                                                    ModernMediaCard(
+                                                        title = item.title,
+                                                        posterUrl = item.poster_url ?: "${uiState.serverUrl.trimEnd('/')}/api/v1/media/${item.id}/thumbnail",
+                                                        onClick = { onPlayMedia(item.id, "books") },
+                                                        modifier = Modifier.width(140.dp)
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                                else -> {
+                                    val content = uiState.libraryContent[library.id] ?: emptyList()
+                                    if (content.isNotEmpty()) {
+                                        item {
+                                            SectionHeader(
+                                                title = library.name.ifBlank {
+                                                    library.library_type.replace("_", " ").split(" ").joinToString(" ") { it.replaceFirstChar { c -> c.uppercase() } }
+                                                },
+                                                onClick = { onOpenLibrary(library.id, library.name, library.library_type) }
+                                            )
+                                            LazyRow(
+                                                contentPadding = PaddingValues(horizontal = 24.dp),
+                                                horizontalArrangement = Arrangement.spacedBy(16.dp)
+                                            ) {
+                                                items(content) { item ->
+                                                    ModernMediaCard(
+                                                        title = item.title,
+                                                        posterUrl = item.poster_url ?: "${uiState.serverUrl.trimEnd('/')}/api/v1/media/${item.id}/thumbnail",
+                                                        year = item.year,
+                                                        onClick = { onPlayMedia(item.id, library.library_type) },
+                                                        modifier = Modifier.width(140.dp)
+                                                    )
+                                                }
                                             }
                                         }
                                     }
@@ -334,10 +391,11 @@ fun HomeScreen(
                                             posterUrl = item.poster_url,
                                             year = item.year,
                                             onClick = {
-                                                if (item.media_type == "series") {
-                                                    onOpenSeries(item.series_name ?: item.title ?: "")
-                                                } else {
-                                                    onPlayMedia(item.id, item.library_type)
+                                                when (item.media_type) {
+                                                    "series" -> onOpenSeries(item.series_name ?: item.title ?: "")
+                                                    "comic_series" -> onOpenComicSeries(item.series_name ?: item.title ?: "")
+                                                    "book" -> onPlayMedia(item.id, "books")
+                                                    else -> onPlayMedia(item.id, item.library_type)
                                                 }
                                             },
                                             modifier = Modifier.width(140.dp)

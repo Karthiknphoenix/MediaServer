@@ -46,6 +46,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Favorite
 import androidx.navigation.compose.currentBackStackEntryAsState
 
 
@@ -186,6 +187,8 @@ fun AppNavigation() {
                     val t = type?.lowercase() ?: ""
                     if (t == "other" || t == "music_videos") {
                         navController.navigate("player/$id")
+                    } else if (t == "books") {
+                        navController.navigate("book/$id")
                     } else {
                         navController.navigate("movie/$id")
                     }
@@ -194,11 +197,16 @@ fun AppNavigation() {
                     val encoded = URLEncoder.encode(name, StandardCharsets.UTF_8.toString())
                     navController.navigate("series/$encoded/detail")
                 },
+                onOpenComicSeries = { name ->
+                    val encoded = URLEncoder.encode(name, StandardCharsets.UTF_8.toString())
+                    navController.navigate("comicseries/$encoded")
+                },
                 onOpenLibrary = { id, name, type -> 
                     val encodedName = URLEncoder.encode(name, StandardCharsets.UTF_8.toString())
                     navController.navigate("library/$id/$encodedName/$type")
                 },
                 onOpenSettings = { navController.navigate("settings") },
+
                 onQuickPlay = { id -> 
                     // Direct Playback
                     navController.navigate("player/$id") 
@@ -206,6 +214,57 @@ fun AppNavigation() {
             )
         }
         
+        composable(
+            route = "reading_list/{listId}",
+            arguments = listOf(navArgument("listId") { type = NavType.LongType })
+        ) { backStackEntry ->
+            val listId = backStackEntry.arguments?.getLong("listId")
+            org.knp.vortex.ui.screens.readinglist.ReadingListsScreen(
+                listId = listId,
+                onBack = { navController.popBackStack() },
+                onPlayMedia = { mediaId, playlist, index, readingMode ->
+                    // Navigate to reader with playlist and reading mode context
+                    val playlistStr = playlist.joinToString(",")
+                    navController.navigate("reader/$mediaId?playlist=$playlistStr&index=$index&mode=$readingMode")
+                }
+            )
+        }
+        
+        // Reader with playlist support for auto-next
+        composable(
+            route = "reader/{mediaId}?playlist={playlist}&index={index}&mode={mode}",
+            arguments = listOf(
+                navArgument("mediaId") { type = NavType.LongType },
+                navArgument("playlist") { type = NavType.StringType; defaultValue = "" },
+                navArgument("index") { type = NavType.IntType; defaultValue = 0 },
+                navArgument("mode") { type = NavType.StringType; defaultValue = "Horizontal" }
+            )
+        ) { backStackEntry ->
+            val mediaId = backStackEntry.arguments?.getLong("mediaId") ?: return@composable
+            val playlistStr = backStackEntry.arguments?.getString("playlist") ?: ""
+            val index = backStackEntry.arguments?.getInt("index") ?: 0
+            val mode = backStackEntry.arguments?.getString("mode") ?: "Horizontal"
+            val playlist = if (playlistStr.isNotEmpty()) {
+                playlistStr.split(",").mapNotNull { it.toLongOrNull() }
+            } else {
+                emptyList()
+            }
+            
+            org.knp.vortex.ui.screens.reader.BookReaderScreen(
+                mediaId = mediaId,
+                playlist = playlist,
+                currentIndex = index,
+                initialReadingMode = mode,
+                onBack = { navController.popBackStack() },
+                onNext = { nextMediaId ->
+                    // Navigate to next chapter in playlist with same reading mode
+                    val nextIndex = index + 1
+                    navController.navigate("reader/$nextMediaId?playlist=$playlistStr&index=$nextIndex&mode=$mode") {
+                        popUpTo("reader/$mediaId?playlist=$playlistStr&index=$index&mode=$mode") { inclusive = true }
+                    }
+                }
+            )
+        }
         composable("search") {
             org.knp.vortex.ui.screens.search.SearchScreen(
                 onPlayMedia = { id, type -> 
@@ -272,20 +331,30 @@ fun AppNavigation() {
                 libraryName = libName,
                 libraryType = libType,
                 onPlayMedia = { id, _ -> 
-                    val t = libType.lowercase()
+                    val t = libType.lowercase() 
                     if (t == "other" || t == "music_videos") {
                         navController.navigate("player/$id")
+                    } else if (t == "books") {
+                        navController.navigate("book/$id")
                     } else {
                         navController.navigate("movie/$id")
                     }
                 },
-                onOpenSeries = { seriesName ->
-                    val encoded = URLEncoder.encode(seriesName, StandardCharsets.UTF_8.toString())
+                onOpenSeries = { name -> 
+                    val encoded = URLEncoder.encode(name, StandardCharsets.UTF_8.toString())
                     navController.navigate("series/$encoded/detail")
+                },
+                onOpenComicSeries = { name ->
+                    val encoded = URLEncoder.encode(name, StandardCharsets.UTF_8.toString())
+                    navController.navigate("comicseries/$encoded")
+                },
+                onOpenReadingList = { listId ->
+                    navController.navigate("reading_list/$listId")
                 },
                 onBack = { navController.popBackStack() }
             )
-        }
+        } 
+
 
         composable(
             route = "movie/{mediaId}",
@@ -346,6 +415,62 @@ fun AppNavigation() {
                     navController.navigate("identify/0/$encodedTitle/tv?seriesName=$encodedTitle")
                 },
                 onPlayEpisode = { id -> navController.navigate("player/$id") }
+            )
+        }
+        
+        composable(
+            route = "book/{mediaId}",
+            arguments = listOf(navArgument("mediaId") { type = NavType.LongType })
+        ) { backStackEntry ->
+            val mediaId = backStackEntry.arguments?.getLong("mediaId") ?: return@composable
+            org.knp.vortex.ui.screens.book.BookDetailScreen(
+                mediaId = mediaId,
+                onRead = { id -> navController.navigate("reader/$id") },
+                onBack = { navController.popBackStack() }
+            )
+        }
+        
+        composable(
+            route = "reader/{mediaId}",
+            arguments = listOf(navArgument("mediaId") { type = NavType.LongType })
+        ) { backStackEntry ->
+            val mediaId = backStackEntry.arguments?.getLong("mediaId") ?: return@composable
+            org.knp.vortex.ui.screens.reader.BookReaderScreen(
+                mediaId = mediaId,
+                onBack = { navController.popBackStack() }
+            )
+        }
+        
+        composable(
+            route = "comicseries/{seriesName}",
+            arguments = listOf(navArgument("seriesName") { type = NavType.StringType })
+        ) { backStackEntry ->
+            val seriesName = URLDecoder.decode(
+                backStackEntry.arguments?.getString("seriesName") ?: "",
+                StandardCharsets.UTF_8.toString()
+            )
+            org.knp.vortex.ui.screens.series.ComicSeriesDetailScreen(
+                seriesName = seriesName,
+                onBack = { navController.popBackStack() },
+                onPlayChapter = { id -> navController.navigate("reader/$id") },
+                onEditMetadata = { name ->
+                    val encoded = URLEncoder.encode(name, StandardCharsets.UTF_8.toString())
+                    navController.navigate("editcomicseries/$encoded")
+                }
+            )
+        }
+
+        composable(
+            route = "editcomicseries/{seriesName}",
+            arguments = listOf(navArgument("seriesName") { type = NavType.StringType })
+        ) { backStackEntry ->
+             val seriesName = URLDecoder.decode(
+                backStackEntry.arguments?.getString("seriesName") ?: "",
+                StandardCharsets.UTF_8.toString()
+            )
+            org.knp.vortex.ui.screens.series.EditComicSeriesScreen(
+                seriesName = seriesName,
+                onBack = { navController.popBackStack() }
             )
         }
     }

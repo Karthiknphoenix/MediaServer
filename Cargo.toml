@@ -1,6 +1,6 @@
 [package]
 name = "vortex_server"
-version = "0.2.2"
+version = "0.2.3"
 edition = "2021"
 default-run = "vortex_server"
 
@@ -17,7 +17,7 @@ assets = [
 systemd-units = { enable = false }
 
 [dependencies]
-axum = "0.7"
+axum = { version = "0.7", features = ["multipart"] }
 tokio = { version = "1", features = ["full"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
@@ -31,9 +31,13 @@ mime_guess = "2"
 chrono = { version = "0.4", features = ["serde"] }
 tokio-util = { version = "0.7", features = ["io"] }
 regex = "1"
+once_cell = "1"
 urlencoding = "2.1.3"
 libsqlite3-sys = { version = "0.27", features = ["bundled"] }
 async-trait = "0.1.89"
+zip = "0.6"
+scraper = "0.19"
+clap = { version = "4.5", features = ["derive"] }
 
 [target.'cfg(not(windows))'.dependencies]
 openssl-sys = { version = "0.9", features = ["vendored"] }

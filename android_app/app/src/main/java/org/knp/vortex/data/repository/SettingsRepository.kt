@@ -48,4 +48,12 @@ class SettingsRepository @Inject constructor(
     }
 
     fun getDefaultUrl(): String = DEFAULT_URL
+
+    fun getReadingMode(seriesName: String): String {
+        return prefs.getString("reading_mode_$seriesName", "Horizontal") ?: "Horizontal"
+    }
+
+    fun setReadingMode(seriesName: String, mode: String) {
+        prefs.edit().putString("reading_mode_$seriesName", mode).apply()
+    }
 }

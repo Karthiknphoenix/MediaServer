@@ -83,4 +83,63 @@ class MediaRepository @Inject constructor(
     suspend fun resetDatabase() = runCatching { api.resetDatabase() }
 
     suspend fun getSubtitles(id: Long) = runCatching { api.getSubtitles(id) }
+
+    suspend fun getBookPages(id: Long) = runCatching { api.getBookPages(id) }
+
+    // Comic series methods
+    suspend fun getComicSeries() = runCatching { api.getComicSeries() }
+    
+    suspend fun getComicSeriesDetail(name: String) = runCatching { api.getComicSeriesDetail(name) }
+    
+    suspend fun getComicChapters(name: String) = runCatching { api.getComicChapters(name) }
+
+    suspend fun updateComicSeriesMetadata(
+        name: String, 
+        plot: String?,
+        year: String?,
+        genres: String?,
+        posterUri: String? // URI or "null"
+    ) = runCatching {
+        // We need a way to get file bytes/stream here. 
+        // Ideally, Repository should take the parts directly or context is needed to resolve URI.
+        // HACK: For now, assuming ViewModel passes parts or we change architecture slightly.
+        // Better: Pass content resolver to repository? Or handle file reading in ViewModel.
+        // Let's assume ViewModel prepares the File/Bytes. 
+        // Actually, easiest is to let ViewModel pass the parts or helper.
+        // But Repository signature shouldn't depend on Android types ideally... but we already depend on context for other things? No.
+        
+        // Let's change signature to take RequestBody/MultipartBody.Part from caller (ViewModel)
+        // OR better: Just accept the string/primitive types and a way to get the file.
+        // I will change this method to accept the pre-built parts from ViewModel for simplicity in this refactor, 
+        // although typically Repositories bridge domain to data.
+        
+        // Wait, I can't easily create MultipartBody.Part here without File/Bytes.
+        // I'll update signature to accept what API needs.
+        throw NotImplementedError("Please call overloads with parts")
+    }
+
+    suspend fun updateComicSeriesMetadataMultipart(
+        name: String,
+        plot: okhttp3.RequestBody?,
+        year: okhttp3.RequestBody?,
+        genres: okhttp3.RequestBody?,
+        poster: okhttp3.MultipartBody.Part?
+    ) = runCatching {
+        api.updateComicSeriesMetadata(name, plot, year, genres, poster)
+    }
+
+    // Reading List methods
+    suspend fun getReadingLists() = runCatching { api.getReadingLists() }
+
+    suspend fun createReadingList(name: String) = runCatching { 
+        api.createReadingList(org.knp.vortex.data.remote.CreateReadingListRequest(name)) 
+    }
+
+    suspend fun getReadingListDetails(id: Long) = runCatching { api.getReadingListDetails(id) }
+
+    suspend fun addItemsToReadingList(listId: Long, mediaIds: List<Long>) = runCatching {
+        api.addItemsToReadingList(listId, org.knp.vortex.data.remote.AddItemsToListRequest(mediaIds))
+    }
+
+    suspend fun deleteReadingList(id: Long) = runCatching { api.deleteReadingList(id) }
 }

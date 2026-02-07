@@ -177,13 +177,19 @@ pub async fn browse_library(
             let mut media_id = None;
             let mut poster_url = None;
 
-            // For files, filter by supported video extensions and get DB ID
+            // For files, filter by supported video/book extensions and get DB ID
             if !is_dir {
                 if let Some(ext) = full_path.extension() {
                      let ext_str = ext.to_string_lossy().to_lowercase();
-                     if !["mp4", "mkv", "avi", "mov", "webm", "wmv", "m4v", "mpg", "mpeg", "flv", "ts"].contains(&ext_str.as_str()) {
+                     let is_video = ["mp4", "mkv", "avi", "mov", "webm", "wmv", "m4v", "mpg", "mpeg", "flv", "ts"].contains(&ext_str.as_str());
+                     let is_book = ["cbz", "cbr", "epub", "pdf", "zip"].contains(&ext_str.as_str());
+
+                     if !is_video && !is_book {
                          continue;
                      }
+
+                     let m_type = if is_book { "book" } else { "movie" };
+
                      // Look up media ID and poster_url
                      let path_str = full_path.to_string_lossy().to_string();
                      
@@ -200,10 +206,11 @@ pub async fn browse_library(
                      } else {
                          let title = full_path.file_stem().map(|s| s.to_string_lossy()).unwrap_or_default();
                          // 2. Try INSERT
-                         if let Ok(r) = sqlx::query("INSERT INTO media (file_path, library_id, title, media_type) VALUES (?, ?, ?, 'movie')")
+                         if let Ok(r) = sqlx::query("INSERT INTO media (file_path, library_id, title, media_type) VALUES (?, ?, ?, ?)")
                              .bind(&path_str)
                              .bind(id)
-                             .bind(title)
+                             .bind(title.to_string())
+                             .bind(m_type)
                              .execute(&pool)
                              .await 
                          {

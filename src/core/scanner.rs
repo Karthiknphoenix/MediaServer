@@ -2,8 +2,25 @@ use sqlx::SqlitePool;
 use walkdir::WalkDir;
 use std::path::Path;
 use regex::Regex;
+use once_cell::sync::Lazy;
 use crate::models::db::library::{Library, LibraryType};
 use crate::core::metadata::{fetch_metadata, fetch_episodes, get_default_provider};
+
+// Cached regex patterns - compiled once at first use, reused for all subsequent calls
+// Episode number patterns (most common first for faster matching)
+static RE_SEASON_EPISODE: Lazy<Regex> = Lazy::new(|| Regex::new(r"s\d+e(\d+)").unwrap());
+static RE_EPISODE_X: Lazy<Regex> = Lazy::new(|| Regex::new(r"\d+x(\d+)").unwrap());
+static RE_EPISODE_WORD: Lazy<Regex> = Lazy::new(|| Regex::new(r"ep(?:isode)?\s*(\d+)").unwrap());
+static RE_EPISODE_DASH: Lazy<Regex> = Lazy::new(|| Regex::new(r"[-\s](\d{1,3})[-\s]").unwrap());
+static RE_EPISODE_E: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?:^|\s)e(\d+)").unwrap());
+
+// Season parsing pattern
+static RE_SEASON: Lazy<Regex> = Lazy::new(|| Regex::new(r"season\s*(\d+)").unwrap());
+
+// Chapter number patterns for comics/books
+static RE_CHAPTER: Lazy<Regex> = Lazy::new(|| Regex::new(r"chapter[_\-\s]*(\d+)").unwrap());
+static RE_CHAPTER_SHORT: Lazy<Regex> = Lazy::new(|| Regex::new(r"ch[_\-\s]*(\d+)").unwrap());
+static RE_ANY_NUMBER: Lazy<Regex> = Lazy::new(|| Regex::new(r"(\d+)").unwrap());
 
 pub async fn scan_media(pool: &SqlitePool) {
     let libraries = sqlx::query_as::<_, Library>("SELECT * FROM libraries")
@@ -20,6 +37,8 @@ pub async fn scan_media(pool: &SqlitePool) {
                     let ext_str = ext.to_string_lossy().to_lowercase();
                     if ["mp4", "mkv", "avi", "mov", "webm", "wmv", "m4v", "mpg", "mpeg", "flv", "ts"].contains(&ext_str.as_str()) {
                         process_video(pool, path, &library).await;
+                    } else if ["pdf", "epub", "cbz", "zip", "cbx"].contains(&ext_str.as_str()) {
+                        process_book(pool, path, &library).await;
                     }
                 }
             }
@@ -58,8 +77,8 @@ fn parse_tv_show_info(path: &Path, library_path: &str, library_name: &str) -> Op
     if components.len() >= 3 {
         let series_name = components[0].as_os_str().to_string_lossy().to_string();
         let season_folder = components[1].as_os_str().to_string_lossy().to_lowercase();
-        let season_number = Regex::new(r"season\s*(\d+)").ok()?.captures(&season_folder)
-            .and_then(|c| c.get(1)?.as_str().parse().ok()).unwrap_or(1);
+        let season_number = RE_SEASON.captures(&season_folder)
+            .and_then(|c| c.get(1).and_then(|m| m.as_str().parse().ok())).unwrap_or(1);
         return Some((series_name, season_number, episode_number));
     }
     
@@ -77,11 +96,12 @@ fn parse_tv_show_info(path: &Path, library_path: &str, library_name: &str) -> Op
 
 fn parse_episode_number(filename: &str) -> Option<i32> {
     let lower = filename.to_lowercase();
-    if let Some(caps) = Regex::new(r"s\d+e(\d+)").ok()?.captures(&lower) { return caps.get(1)?.as_str().parse().ok(); }
-    if let Some(caps) = Regex::new(r"\d+x(\d+)").ok()?.captures(&lower) { return caps.get(1)?.as_str().parse().ok(); }
-    if let Some(caps) = Regex::new(r"ep(?:isode)?\s*(\d+)").ok()?.captures(&lower) { return caps.get(1)?.as_str().parse().ok(); }
-    if let Some(caps) = Regex::new(r"[-\s](\d{1,3})[-\s]").ok()?.captures(&lower) { return caps.get(1)?.as_str().parse().ok(); }
-    if let Some(caps) = Regex::new(r"(?:^|\s)e(\d+)").ok()?.captures(&lower) { return caps.get(1)?.as_str().parse().ok(); }
+    // Use cached regex patterns - no recompilation on each call
+    if let Some(caps) = RE_SEASON_EPISODE.captures(&lower) { return caps.get(1)?.as_str().parse().ok(); }
+    if let Some(caps) = RE_EPISODE_X.captures(&lower) { return caps.get(1)?.as_str().parse().ok(); }
+    if let Some(caps) = RE_EPISODE_WORD.captures(&lower) { return caps.get(1)?.as_str().parse().ok(); }
+    if let Some(caps) = RE_EPISODE_DASH.captures(&lower) { return caps.get(1)?.as_str().parse().ok(); }
+    if let Some(caps) = RE_EPISODE_E.captures(&lower) { return caps.get(1)?.as_str().parse().ok(); }
     None
 }
 
@@ -156,4 +176,128 @@ async fn process_video(pool: &SqlitePool, path: &Path, library: &Library) {
         }
         println!("Updated metadata for: {}", file_stem);
     }
+}
+
+fn parse_comic_info(path: &Path, library_path: &str) -> (Option<String>, Option<i32>) {
+    let relative = match path.strip_prefix(library_path) {
+        Ok(r) => r,
+        Err(_) => return (None, None),
+    };
+    let components: Vec<_> = relative.components().collect();
+    
+    // If file is directly in library root, no series
+    if components.len() <= 1 {
+        return (None, None);
+    }
+    
+    // First folder = series name
+    let series_name = components[0].as_os_str().to_string_lossy().to_string();
+    
+    // Parse chapter number from filename
+    let filename = path.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
+    let chapter_number = parse_chapter_number(&filename);
+    
+    (Some(series_name), chapter_number)
+}
+
+fn parse_chapter_number(filename: &str) -> Option<i32> {
+    let lower = filename.to_lowercase();
+    // Use cached regex patterns - no recompilation on each call
+    if let Some(caps) = RE_CHAPTER.captures(&lower) {
+        return caps.get(1)?.as_str().parse().ok();
+    }
+    if let Some(caps) = RE_CHAPTER_SHORT.captures(&lower) {
+        return caps.get(1)?.as_str().parse().ok();
+    }
+    // Fallback: just find any number
+    if let Some(caps) = RE_ANY_NUMBER.captures(&lower) {
+        return caps.get(1)?.as_str().parse().ok();
+    }
+    None
+}
+
+fn extract_cbz_cover(cbz_path: &Path, media_id: i64) -> bool {
+    use std::io::Read;
+    
+    let file = match std::fs::File::open(cbz_path) {
+        Ok(f) => f,
+        Err(_) => return false,
+    };
+    
+    let mut archive = match zip::ZipArchive::new(file) {
+        Ok(a) => a,
+        Err(_) => return false,
+    };
+    
+    // Find first image file
+    let mut image_names: Vec<String> = archive.file_names()
+        .filter(|name| {
+            let lower = name.to_lowercase();
+            lower.ends_with(".jpg") || lower.ends_with(".jpeg") || 
+            lower.ends_with(".png") || lower.ends_with(".webp")
+        })
+        .map(|s| s.to_string())
+        .collect();
+    
+    image_names.sort();
+    
+    if image_names.is_empty() {
+        return false;
+    }
+    
+    let first_image = &image_names[0];
+    let mut file = match archive.by_name(first_image) {
+        Ok(f) => f,
+        Err(_) => return false,
+    };
+    
+    let mut buffer = Vec::new();
+    if file.read_to_end(&mut buffer).is_err() {
+        return false;
+    }
+    
+    // Save to thumbnails directory
+    let thumb_dir = std::path::Path::new("thumbnails");
+    if !thumb_dir.exists() {
+        let _ = std::fs::create_dir(thumb_dir);
+    }
+    
+    let thumb_path = thumb_dir.join(format!("{}.jpg", media_id));
+    std::fs::write(&thumb_path, &buffer).is_ok()
+}
+
+async fn process_book(pool: &SqlitePool, path: &Path, library: &Library) {
+    let path_str = path.to_string_lossy().to_string();
+    let file_stem = path.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_else(|| "Unknown".to_string());
+    
+    // Parse comic series info from folder structure
+    let (series_name, chapter_number) = parse_comic_info(path, &library.path);
+    
+    // Check if already exists
+    let existing: Option<(i64,)> = sqlx::query_as("SELECT id FROM media WHERE file_path = ?")
+        .bind(&path_str).fetch_optional(pool).await.unwrap_or(None);
+
+    if let Some((_id,)) = existing {
+        // Update library_id and series info
+        let _ = sqlx::query("UPDATE media SET library_id = ?, series_name = COALESCE(series_name, ?), episode_number = COALESCE(episode_number, ?) WHERE file_path = ?")
+            .bind(library.id).bind(&series_name).bind(chapter_number).bind(&path_str).execute(pool).await;
+        return;
+    }
+
+    // Insert new book with series info (reusing episode_number for chapter_number)
+    let result = sqlx::query("INSERT INTO media (file_path, title, library_id, media_type, series_name, episode_number) VALUES (?, ?, ?, 'book', ?, ?)")
+        .bind(&path_str).bind(&file_stem).bind(library.id).bind(&series_name).bind(chapter_number).execute(pool).await;
+    
+    // Extract cover from CBZ
+    if let Ok(res) = result {
+        let media_id = res.last_insert_rowid();
+        let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("").to_lowercase();
+        if ext == "cbz" || ext == "zip" {
+            if extract_cbz_cover(path, media_id) {
+                println!("Extracted cover for book: {}", file_stem);
+            }
+        }
+    }
+        
+    println!("Added book: {} (series: {:?}, chapter: {:?})", file_stem, series_name, chapter_number);
 }

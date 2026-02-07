@@ -8,6 +8,7 @@ pub enum LibraryType {
     Movies,
     TvShows,
     MusicVideos,
+    Books,
     Other,
 }
 

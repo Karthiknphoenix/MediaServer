@@ -244,13 +244,6 @@ fun SeriesDetailScreen(
                                     }
                                 )
                                 DropdownMenuItem(
-                                    text = { Text("Refresh Metadata", color = Color.White) },
-                                    onClick = {
-                                        viewModel.refreshMetadata()
-                                        showMenu = false
-                                    }
-                                )
-                                DropdownMenuItem(
                                     text = { Text("Identify", color = Color.White) },
                                     onClick = {
                                         onIdentify(viewModel.seriesName)

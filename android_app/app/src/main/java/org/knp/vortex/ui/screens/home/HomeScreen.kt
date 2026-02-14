@@ -171,16 +171,7 @@ fun HomeScreen(
             containerColor = Color.Transparent,
             topBar = {
                 org.knp.vortex.ui.components.AppHeader(
-                    onLogoLongClick = { showPinDialog = true },
-                    actions = {
-                        IconButton(onClick = onOpenSettings) {
-                            Icon(
-                                imageVector = Icons.Default.Settings,
-                                contentDescription = "Settings",
-                                tint = Color.White
-                            )
-                        }
-                    }
+                    onLogoLongClick = { showPinDialog = true }
                 )
             }
         ) { padding ->

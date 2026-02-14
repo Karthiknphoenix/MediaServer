@@ -87,13 +87,13 @@ pub async fn refresh_media_metadata(
         .await?
         .ok_or_else(|| AppError::NotFound(format!("Media with id {} not found", id)))?;
 
-    let title_to_search = media.title.unwrap_or_else(|| {
-         std::path::Path::new(&media.file_path)
-            .file_stem()
-            .unwrap_or_default()
-            .to_string_lossy()
-            .to_string()
-    });
+    // Always derive search term from the actual filename on disk,
+    // so that renaming a file and refreshing picks up the new name.
+    let title_to_search = std::path::Path::new(&media.file_path)
+        .file_stem()
+        .unwrap_or_default()
+        .to_string_lossy()
+        .to_string();
 
     let type_hint = if media.series_name.is_some() { Some("series") } else { Some("movie") };
 

@@ -21,6 +21,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import coil.compose.AsyncImage
+import coil.compose.SubcomposeAsyncImage
 import coil.request.ImageRequest
 import org.knp.vortex.ui.theme.BlackBackground
 import org.knp.vortex.ui.theme.SurfaceColor
@@ -341,18 +342,60 @@ fun ReaderPage(
     val imageUrl = remember(serverUrl, mediaId, pageIndex) {
          "${serverUrl.trimEnd('/')}/api/v1/media/$mediaId/page/$pageIndex"
     }
-    
-    val model = ImageRequest.Builder(context)
-        .data(imageUrl)
-        .crossfade(true)
-        .build()
 
-    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        AsyncImage(
+    if (fitScreen) {
+        // Pager modes (Horizontal/Vertical) — fill the screen, single page at a time
+        val model = ImageRequest.Builder(context)
+            .data(imageUrl)
+            .crossfade(true)
+            .build()
+
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center
+        ) {
+            AsyncImage(
+                model = model,
+                contentDescription = null,
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Fit
+            )
+        }
+    } else {
+        // Webtoon mode — continuous vertical scroll in LazyColumn
+
+        val model = ImageRequest.Builder(context)
+            .data(imageUrl)
+            .crossfade(true)
+            .size(coil.size.Size.ORIGINAL)
+            .allowHardware(false)
+            .build()
+
+        SubcomposeAsyncImage(
             model = model,
             contentDescription = null,
-            modifier = if (fitScreen) Modifier.fillMaxSize() else Modifier.fillMaxWidth(),
-            contentScale = if (fitScreen) ContentScale.Fit else ContentScale.FillWidth
+            modifier = Modifier.fillMaxWidth(),
+            contentScale = ContentScale.FillWidth,
+            loading = {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(300.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator(color = Color.White)
+                }
+            },
+            error = {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(300.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("Failed to load page ${pageIndex + 1}", color = Color.White.copy(alpha = 0.5f))
+                }
+            }
         )
     }
 }

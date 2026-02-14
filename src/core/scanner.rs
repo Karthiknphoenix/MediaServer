@@ -23,6 +23,9 @@ static RE_CHAPTER_SHORT: Lazy<Regex> = Lazy::new(|| Regex::new(r"ch[_\-\s]*(\d+)
 static RE_ANY_NUMBER: Lazy<Regex> = Lazy::new(|| Regex::new(r"(\d+)").unwrap());
 
 pub async fn scan_media(pool: &SqlitePool) {
+    // Clean up stale paths first (renamed/deleted files)
+    cleanup_missing_files(pool).await;
+
     let libraries = sqlx::query_as::<_, Library>("SELECT * FROM libraries")
         .fetch_all(pool)
         .await
@@ -44,8 +47,6 @@ pub async fn scan_media(pool: &SqlitePool) {
             }
         }
     }
-    
-    cleanup_missing_files(pool).await;
 }
 
 async fn cleanup_missing_files(pool: &SqlitePool) {

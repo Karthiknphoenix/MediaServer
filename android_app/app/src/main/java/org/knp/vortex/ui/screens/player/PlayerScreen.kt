@@ -213,7 +213,8 @@ fun PlayerScreen(
     }
 
     val lifecycleOwner = LocalLifecycleOwner.current
-    var isFullscreen by rememberSaveable { mutableStateOf(false) }
+    var isFullscreen by rememberSaveable { mutableStateOf(true) }
+    var resizeMode by rememberSaveable { mutableIntStateOf(androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_FIT) }
 
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
@@ -237,7 +238,7 @@ fun PlayerScreen(
             val controller = WindowInsetsControllerCompat(window, window.decorView)
             
             if (isFullscreen) {
-                activity.requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+                activity.requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR
                 WindowCompat.setDecorFitsSystemWindows(window, false)
                 controller.hide(WindowInsetsCompat.Type.systemBars())
                 controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
@@ -263,7 +264,17 @@ fun PlayerScreen(
                 player = exoPlayer
                 setShowSubtitleButton(true)
                 setFullscreenButtonClickListener {
-                    isFullscreen = !isFullscreen
+                    resizeMode = when (resizeMode) {
+                        androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_FIT -> androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+                        androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_ZOOM -> androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_FILL
+                        else -> androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_FIT
+                    }
+                    val msg = when (resizeMode) {
+                        androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_FIT -> "Fit"
+                        androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_ZOOM -> "Fit to Screen"
+                        else -> "Fill"
+                    }
+                    android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_SHORT).show()
                 }
                 controllerShowTimeoutMs = 3000
                 keepScreenOn = true
@@ -299,14 +310,45 @@ fun PlayerScreen(
                         distanceY: Float
                     ): Boolean {
                         if (e1 == null) return false
-                        val width = width.toFloat()
-                        val height = height.toFloat()
+                        val widthView = width.toFloat()
+                        val heightView = height.toFloat()
                         val x = e1.x
                         
+                        var handledAsPan = false
+                        if (resizeMode == androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_ZOOM) {
+                            val player = this@apply.player
+                            val vWidth = player?.videoSize?.width?.toFloat() ?: 0f
+                            val vHeight = player?.videoSize?.height?.toFloat() ?: 0f
+                            if (vWidth > 0 && vHeight > 0) {
+                                val vAr = vWidth / vHeight
+                                val viewAr = widthView / heightView
+                                
+                                if (vAr > viewAr && kotlin.math.abs(distanceX) > kotlin.math.abs(distanceY)) {
+                                    val scaledWidth = heightView * vAr
+                                    val maxPan = (scaledWidth - widthView) / 2f
+                                    if (maxPan > 0) {
+                                        val currentPan = videoSurfaceView?.translationX ?: 0f
+                                        videoSurfaceView?.translationX = (currentPan - distanceX).coerceIn(-maxPan, maxPan)
+                                        handledAsPan = true
+                                    }
+                                } else if (vAr < viewAr && kotlin.math.abs(distanceY) > kotlin.math.abs(distanceX)) {
+                                    val scaledHeight = widthView / vAr
+                                    val maxPan = (scaledHeight - heightView) / 2f
+                                    if (maxPan > 0) {
+                                        val currentPan = videoSurfaceView?.translationY ?: 0f
+                                        videoSurfaceView?.translationY = (currentPan - distanceY).coerceIn(-maxPan, maxPan)
+                                        handledAsPan = true
+                                    }
+                                }
+                            }
+                        }
+
+                        if (handledAsPan) return true
+
                         if (kotlin.math.abs(distanceY) > kotlin.math.abs(distanceX)) {
-                            val delta = distanceY / height 
+                            val delta = distanceY / heightView 
                             
-                            if (x < width / 2) {
+                            if (x < widthView / 2) {
                                 showBrightnessIndicator = true
                                 showVolumeIndicator = false
                                 val scrollWindow = context.findActivity()?.window
@@ -333,6 +375,15 @@ fun PlayerScreen(
 
                 setOnTouchListener { _, event ->
                     gestureDetector.onTouchEvent(event)
+                }
+            }
+        },
+        update = { view ->
+            if (view.resizeMode != resizeMode) {
+                view.resizeMode = resizeMode
+                if (resizeMode != androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_ZOOM) {
+                    view.videoSurfaceView?.translationX = 0f
+                    view.videoSurfaceView?.translationY = 0f
                 }
             }
         },
